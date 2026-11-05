@@ -191,23 +191,32 @@ try {
     // -------------------------------------------------------------------------
     // TEST 9: Client CRUD & Foreign Key Safe Delete
     // -------------------------------------------------------------------------
-    // 9a. Create Client
+    // 9a. Create Client A (unlinked)
     $cStmt = $pdo->prepare("INSERT INTO clients (client_name, contact_person, email, phone, address) VALUES ('Test Corp Eswatini', 'Sipho Zulu', 'szulu@testcorp.co.sz', '+268 7699 8877', 'Mbabane Industrial Site')");
     $cStmt->execute();
     $testClientId = (int)$pdo->lastInsertId();
 
-    // 9b. Update Client
+    // 9b. Update Client A
     $cUp = $pdo->prepare("UPDATE clients SET contact_person = 'Sipho Zulu (Updated)' WHERE client_id = :id");
     $cUp->execute([':id' => $testClientId]);
 
-    // 9c. Delete unlinked client (permitted)
+    // 9c. Delete unlinked client A (permitted)
     $cDel = $pdo->prepare("DELETE FROM clients WHERE client_id = :id");
     $cDel->execute([':id' => $testClientId]);
 
-    // 9d. Test FK rejection on client with tickets (Client #1 EEC)
+    // 9d. Create Client B and attach a ticket to verify FK deletion protection
+    $cStmt2 = $pdo->prepare("INSERT INTO clients (client_name, contact_person, email, phone, address) VALUES ('Protected Client Corp', 'Themba Dlamini', 'themba@protected.co.sz', '+268 2400 1122', 'Ezulwini Commercial Hub')");
+    $cStmt2->execute();
+    $protectedClientId = (int)$pdo->lastInsertId();
+
+    $tFkStmt = $pdo->prepare("INSERT INTO tickets (ticket_number, client_id, title, description, priority, status) VALUES ('TK-FK-PROTECT', :cid, 'Protection Verification', 'Test FK constraint', 'Low', 'Open')");
+    $tFkStmt->execute([':cid' => $protectedClientId]);
+    $protectedTicketId = (int)$pdo->lastInsertId();
+
+    // Test FK rejection on client with tickets
     $fkBlocked = false;
     try {
-        $pdo->exec("DELETE FROM clients WHERE client_id = 1");
+        $pdo->exec("DELETE FROM clients WHERE client_id = {$protectedClientId}");
     } catch (Exception $e) {
         $fkBlocked = true;
     }
@@ -217,19 +226,28 @@ try {
         'TEST-09',
         'Client CRUD operations and foreign key deletion safety',
         'Client record created, updated, safely deleted; FK constraint blocks deletion of client with tickets',
-        "Created ID #{$testClientId}, updated, deleted. Deletion of Client #1 with tickets was correctly BLOCKED by foreign key constraint.",
+        "Created ID #{$testClientId}, updated, deleted. Deletion of Client #{$protectedClientId} with tickets was correctly BLOCKED by foreign key constraint.",
         $t9Passed
     );
 
     // -------------------------------------------------------------------------
     // TEST 10: Service Tickets Created and Linked
     // -------------------------------------------------------------------------
+    // Ensure a test staff member exists for assignment
+    $sStmt = $pdo->prepare("INSERT INTO staff (full_name, email, phone, job_title, department, is_active) VALUES ('AutoTest Engineer', 'autotest_eng@westec.co.sz', '+268 7600 0001', 'Systems Specialist', 'Technical', 1)");
+    $sStmt->execute();
+    $testStaffId = (int)$pdo->lastInsertId();
+
     $tNum = 'TK-TEST-' . substr(md5(uniqid()), 0, 4);
     $tickStmt = $pdo->prepare("
         INSERT INTO tickets (ticket_number, client_id, assigned_staff_id, title, description, priority, status, created_at)
-        VALUES (:num, 1, 3, 'Test Ticket Configuration', 'Automated ticket testing', 'High', 'Open', NOW())
+        VALUES (:num, :cid, :sid, 'Test Ticket Configuration', 'Automated ticket testing', 'High', 'Open', NOW())
     ");
-    $tickStmt->execute([':num' => $tNum]);
+    $tickStmt->execute([
+        ':num' => $tNum,
+        ':cid' => $protectedClientId,
+        ':sid' => $testStaffId
+    ]);
     $newTicketId = (int)$pdo->lastInsertId();
     $t10Passed = ($newTicketId > 0);
     recordTest(
@@ -237,21 +255,25 @@ try {
         'TEST-10',
         'Service tickets created and assigned to clients and staff',
         'Ticket inserted with foreign keys referencing clients and staff tables',
-        "Ticket #{$tNum} created with Ticket ID #{$newTicketId} assigned to Client #1 (EEC) and Staff #3 (Sibusiso Dlamini)",
+        "Ticket #{$tNum} created with Ticket ID #{$newTicketId} assigned to Client #{$protectedClientId} and Staff #{$testStaffId}",
         $t10Passed
     );
 
     // -------------------------------------------------------------------------
     // TEST 11: Inventory Receipts Update Stock via Trigger (trg_update_inventory_stock_after_insert)
     // -------------------------------------------------------------------------
-    $invItem = 1; // Cisco switch
-    $beforeStock = (int)$pdo->query("SELECT quantity_in_stock FROM inventory WHERE item_id = {$invItem}")->fetchColumn();
+    // Create temporary test inventory item
+    $iStmt = $pdo->prepare("INSERT INTO inventory (sku, item_name, category, quantity_in_stock, unit_price, reorder_level) VALUES ('SKU-AUTOTEST-01', 'Test Switch Unit', 'Networking', 10, 2500.00, 3)");
+    $iStmt->execute();
+    $testItemId = (int)$pdo->lastInsertId();
+
+    $beforeStock = (int)$pdo->query("SELECT quantity_in_stock FROM inventory WHERE item_id = {$testItemId}")->fetchColumn();
     $incQty = 4;
     $pdo->exec("
         INSERT INTO inventory_transactions (item_id, transaction_type, quantity, unit_cost, reference_note, created_by, transaction_date)
-        VALUES ({$invItem}, 'IN', {$incQty}, 14500.00, 'Automated Test IN', 1, NOW())
+        VALUES ({$testItemId}, 'IN', {$incQty}, 2500.00, 'Automated Test IN', 1, NOW())
     ");
-    $afterStock = (int)$pdo->query("SELECT quantity_in_stock FROM inventory WHERE item_id = {$invItem}")->fetchColumn();
+    $afterStock = (int)$pdo->query("SELECT quantity_in_stock FROM inventory WHERE item_id = {$testItemId}")->fetchColumn();
     $t11Passed = ($afterStock === $beforeStock + $incQty);
     recordTest(
         $results,
@@ -271,7 +293,7 @@ try {
     try {
         $pdo->exec("
             INSERT INTO inventory_transactions (item_id, transaction_type, quantity, unit_cost, reference_note, created_by, transaction_date)
-            VALUES ({$invItem}, 'OUT', {$excessWithdrawal}, 0.00, 'Illegal Overdraft Test', 1, NOW())
+            VALUES ({$testItemId}, 'OUT', {$excessWithdrawal}, 0.00, 'Illegal Overdraft Test', 1, NOW())
         ");
     } catch (Exception $e) {
         $overdraftRejected = true;
@@ -295,7 +317,7 @@ try {
     try {
         $pdo->exec("
             INSERT INTO projects (project_name, client_id, description, start_date, due_date, budget, status, created_at)
-            VALUES ('Invalid Date Project', 1, 'Test', '2026-12-01', '2026-11-01', 10000.00, 'Planning', NOW())
+            VALUES ('Invalid Date Project', {$protectedClientId}, 'Test', '2026-12-01', '2026-11-01', 10000.00, 'Planning', NOW())
         ");
     } catch (Exception $e) {
         $dateRejected = true;
@@ -346,6 +368,17 @@ try {
         "Parsed message: '{$parsed}' (Sensitive server details stripped)",
         $t15Passed
     );
+
+    // Cleanup all test records created during automated verification
+    $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
+    $pdo->exec("DELETE FROM tickets WHERE ticket_id IN ({$protectedTicketId}, {$newTicketId})");
+    $pdo->exec("DELETE FROM staff WHERE staff_id = {$testStaffId}");
+    $pdo->exec("DELETE FROM clients WHERE client_id = {$protectedClientId}");
+    $pdo->exec("DELETE FROM inventory_transactions WHERE item_id = {$testItemId}");
+    $pdo->exec("DELETE FROM inventory WHERE item_id = {$testItemId}");
+    $pdo->exec("DELETE FROM users WHERE user_id = {$newUserId}");
+    $pdo->exec("DELETE FROM audit_logs WHERE user_id = {$newUserId} OR record_id = {$newUserId}");
+    $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
 
     // Output Summary
     $totalPassed = count(array_filter($results, fn($r) => $r['status'] === 'PASS'));

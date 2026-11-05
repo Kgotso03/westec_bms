@@ -157,6 +157,17 @@ body {
     color: #ffffff;
 }
 
+.brand-logo-img {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    flex-shrink: 0;
+}
+
 .brand-info {
     line-height: 1.2;
 }
@@ -453,4 +464,74 @@ body {
         gap: 0.5rem;
         text-align: center;
     }
+}
+
+/* ==============================================================================
+   Lucide Icons Global System Styling
+   ============================================================================== */
+.lucide, svg.lucide {
+    display: inline-block;
+    width: 1.15em;
+    height: 1.15em;
+    vertical-align: -0.15em;
+    stroke-width: 2;
+    stroke: currentColor;
+    fill: none;
+    line-height: 1;
+}
+
+/* Sizing variations matching typography scale */
+.lucide.fs-1, svg.lucide.fs-1 { width: 2.5rem; height: 2.5rem; }
+.lucide.fs-2, svg.lucide.fs-2 { width: 2rem; height: 2rem; }
+.lucide.fs-3, svg.lucide.fs-3 { width: 1.75rem; height: 1.75rem; }
+.lucide.fs-4, svg.lucide.fs-4 { width: 1.5rem; height: 1.5rem; }
+.lucide.fs-5, svg.lucide.fs-5 { width: 1.25rem; height: 1.25rem; }
+.lucide.fs-6, svg.lucide.fs-6 { width: 1rem; height: 1rem; }
+
+/* In buttons */
+.btn .lucide, .btn svg.lucide {
+    vertical-align: -0.18em;
+}
+
+.btn-lg .lucide, .btn-lg svg.lucide {
+    width: 1.25em;
+    height: 1.25em;
+}
+
+.btn-sm .lucide, .btn-sm svg.lucide {
+    width: 1em;
+    height: 1em;
+}
+
+/* In Sidebar Navigation */
+.sidebar-nav .nav-link .lucide,
+.sidebar-nav .nav-link svg.lucide {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    margin-right: 0.25rem;
+    stroke-width: 2;
+}
+
+/* In brand icons */
+.brand-icon .lucide,
+.brand-icon svg.lucide {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2.25;
+}
+
+/* In input groups */
+.input-group-text .lucide,
+.input-group-text svg.lucide {
+    width: 1.1em;
+    height: 1.1em;
+}
+
+/* In dropdowns */
+.dropdown-item .lucide,
+.dropdown-item svg.lucide {
+    width: 1.1em;
+    height: 1.1em;
+    vertical-align: -0.15em;
 }

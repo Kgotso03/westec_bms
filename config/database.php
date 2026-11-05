@@ -20,35 +20,45 @@ defined('APP_VERSION') or define('APP_VERSION', 'Phase 4.0');
 
 /**
  * Returns a singleton PDO connection instance.
+ * Automatically recovers from stale or closed MySQL connections.
  *
+ * @param bool $forceReconnect
  * @return PDO
- * @throws PDOException
+ * @throws Exception
  */
-function getDbConnection(): PDO {
+function getDbConnection(bool $forceReconnect = false): PDO {
     static $pdo = null;
 
-    if ($pdo === null) {
-        $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=%s',
-            DB_HOST,
-            DB_NAME,
-            DB_CHARSET
-        );
-
-        $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false, // Enforce native prepared statements
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES " . DB_CHARSET
-        ];
-
+    if ($pdo !== null && !$forceReconnect) {
         try {
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        } catch (PDOException $e) {
-            // Log raw technical error on the server; display friendly message to client
-            error_log('Database Connection Error: ' . $e->getMessage());
-            throw new Exception('A secure connection to the WesTec Eswatini database could not be established. Please ensure the local MySQL service is running.');
+            // Light probe to confirm MySQL socket is alive
+            $pdo->query("SELECT 1");
+            return $pdo;
+        } catch (\Throwable $e) {
+            $pdo = null; // Stale connection, re-instantiate below
         }
+    }
+
+    $dsn = sprintf(
+        'mysql:host=%s;dbname=%s;charset=%s',
+        DB_HOST,
+        DB_NAME,
+        DB_CHARSET
+    );
+
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false, // Enforce native prepared statements
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES " . DB_CHARSET,
+        PDO::ATTR_TIMEOUT            => 5
+    ];
+
+    try {
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+    } catch (PDOException $e) {
+        error_log('Database Connection Error: ' . $e->getMessage());
+        throw new Exception('A secure connection to the WesTec Eswatini database could not be established. Please ensure the local MySQL service is running.');
     }
 
     return $pdo;

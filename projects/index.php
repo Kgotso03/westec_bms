@@ -166,7 +166,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (!empty($errors)): ?>
     <div class="alert alert-danger mb-4 shadow-sm" role="alert">
         <div class="d-flex align-items-center mb-1">
-            <i class="bi bi-shield-x me-2 fs-5"></i>
+            <i data-lucide="shield-x" class="me-2 fs-5"></i>
             <strong class="fs-6">Project Validation Rejected:</strong>
         </div>
         <ul class="mb-0 ps-3">
@@ -180,13 +180,13 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Quick Navigation Bar for Projects Suite -->
 <div class="d-flex gap-2 mb-3">
     <a href="/westec_bms/projects/index.php" class="btn btn-westec btn-sm">
-        <i class="bi bi-diagram-3-fill me-1"></i> Projects Overview
+        <i data-lucide="workflow" class="me-1"></i> Projects Overview
     </a>
     <a href="/westec_bms/projects/milestones.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-flag-fill me-1"></i> Milestones Management
+        <i data-lucide="flag" class="me-1"></i> Milestones Management
     </a>
     <a href="/westec_bms/projects/assignments.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-person-lines-fill me-1"></i> Team Staff Assignments
+        <i data-lucide="users" class="me-1"></i> Team Staff Assignments
     </a>
 </div>
 
@@ -194,20 +194,15 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-folder-plus text-primary"></i>
+            <i data-lucide="folder-plus" class="text-primary"></i>
             <?= $editProject ? 'Edit Project: ' . e($editProject['project_name']) : 'Initiate New Project (Trigger Enforced Dates)' ?>
         </h2>
         <?php if ($editProject): ?>
             <a href="/westec_bms/projects/index.php" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle me-1"></i> Cancel Edit
+                <i data-lucide="x-circle" class="me-1"></i> Cancel Edit
             </a>
         <?php endif; ?>
     </div>
-
-    <p class="small text-muted mb-3">
-        <i class="bi bi-info-circle me-1 text-primary"></i>
-        <strong>Database Trigger Rule:</strong> MySQL trigger <code>trg_validate_project_dates_before_insert</code> automatically rejects any project submission if the Due Date is earlier than the Start Date.
-    </p>
 
     <form method="POST" action="/westec_bms/projects/index.php" novalidate>
         <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
@@ -251,7 +246,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-4">
                 <label for="due_date" class="form-label">Due Date <span class="text-danger">*</span></label>
                 <input type="date" class="form-control" id="due_date" name="due_date" required value="<?= e($editProject['due_date'] ?? date('Y-m-d', strtotime('+30 days'))) ?>">
-                <div class="form-text text-muted">Must be &ge; Start Date (Trigger Enforced).</div>
+                <div class="form-text text-muted">Must be on or after Start Date.</div>
             </div>
 
             <div class="col-md-4">
@@ -267,7 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-save me-1"></i> <?= $editProject ? 'Update Project' : 'Save Project' ?>
+                <i data-lucide="save" class="me-1"></i> <?= $editProject ? 'Update Project' : 'Save Project' ?>
             </button>
         </div>
     </form>
@@ -277,11 +272,11 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-kanban text-primary"></i>
+            <i data-lucide="kanban" class="text-primary"></i>
             Active Projects Directory (<?= count($projects) ?>)
         </h2>
         <div class="input-group input-group-sm" style="max-width: 250px;">
-            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+            <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
             <input type="text" class="form-control" placeholder="Search projects..." data-table-filter="projectsTable">
         </div>
     </div>
@@ -314,7 +309,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <td><span class="badge bg-light text-dark border">#<?= $proj['project_id'] ?></span></td>
                             <td>
                                 <strong class="text-dark d-block"><?= e($proj['project_name']) ?></strong>
-                                <span class="text-muted small"><i class="bi bi-building me-1"></i><?= e($proj['client_name']) ?></span>
+                                <span class="text-muted small"><i data-lucide="building-2" class="me-1"></i><?= e($proj['client_name']) ?></span>
                             </td>
                             <td>
                                 <div class="small">Start: <strong><?= formatDate($proj['start_date'], 'd M Y') ?></strong></div>
@@ -336,13 +331,13 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <a href="/westec_bms/projects/milestones.php?project_id=<?= $proj['project_id'] ?>" class="btn btn-outline-primary" title="Manage Project Milestones">
-                                        <i class="bi bi-flag"></i>
+                                        <i data-lucide="flag"></i>
                                     </a>
                                     <a href="/westec_bms/projects/assignments.php?project_id=<?= $proj['project_id'] ?>" class="btn btn-outline-info text-dark" title="Assign Engineers">
-                                        <i class="bi bi-person-plus"></i>
+                                        <i data-lucide="user-plus"></i>
                                     </a>
                                     <a href="/westec_bms/projects/index.php?edit=<?= $proj['project_id'] ?>" class="btn btn-outline-secondary" title="Edit Project Details">
-                                        <i class="bi bi-pencil-square"></i>
+                                        <i data-lucide="file-edit"></i>
                                     </a>
                                 </div>
                             </td>

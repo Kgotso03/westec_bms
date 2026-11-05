@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo = getDbConnection();
                 $stmt = $pdo->prepare("
-                    SELECT u.user_id, u.username, u.password_hash, u.role_id, u.email, u.status, r.role_name
+                    SELECT u.user_id, u.username, u.password_hash, u.role_id, u.email, u.status, u.profile_photo, r.role_name
                     FROM users u
                     JOIN roles r ON u.role_id = r.role_id
                     WHERE u.username = :username
@@ -90,8 +90,8 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="col-md-6 col-lg-5">
         <div class="content-section p-4 p-md-5">
             <div class="text-center mb-4">
-                <div class="d-inline-flex align-items-center justify-content-center bg-light border rounded-circle mb-3" style="width: 64px; height: 64px; color: var(--westec-primary);">
-                    <i class="bi bi-shield-lock-fill fs-2"></i>
+                <div class="d-inline-block mb-3 p-1 bg-white border rounded-circle shadow-sm" style="width: 84px; height: 84px;">
+                    <img src="<?= getSystemLogoUrl() ?>" alt="WesTec Logo" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;">
                 </div>
                 <h2 class="h4 fw-bold text-dark">Portal Authentication</h2>
                 <p class="text-muted small">Enter your authorized WesTec Eswatini credentials</p>
@@ -99,7 +99,7 @@ require_once __DIR__ . '/../includes/header.php';
 
             <?php if (!empty($error)): ?>
                 <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                    <i data-lucide="alert-triangle" class="me-2 fs-5"></i>
                     <div><?= e($error) ?></div>
                 </div>
             <?php endif; ?>
@@ -110,7 +110,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="mb-3">
                     <label for="username" class="form-label">Username</label>
                     <div class="input-group">
-                        <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
+                        <span class="input-group-text bg-light"><i data-lucide="user"></i></span>
                         <input type="text" class="form-control" id="username" name="username" value="<?= e($username) ?>" required autofocus autocomplete="username" placeholder="e.g. admin">
                     </div>
                 </div>
@@ -118,35 +118,25 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="mb-4">
                     <label for="password" class="form-label">Password</label>
                     <div class="input-group">
-                        <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
+                        <span class="input-group-text bg-light"><i data-lucide="key"></i></span>
                         <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password" placeholder="Enter your password">
                     </div>
                 </div>
 
                 <div class="d-grid mb-3">
                     <button type="submit" class="btn btn-westec btn-lg">
-                        <i class="bi bi-box-arrow-in-right me-2"></i> Sign In to Portal
+                        <i data-lucide="log-in" class="me-2"></i> Sign In to Portal
                     </button>
                 </div>
 
                 <div class="text-center">
-                    <span class="text-muted small">Don't have an account?</span>
-                    <a href="/westec_bms/users/register.php" class="small fw-bold text-decoration-none" style="color: var(--westec-primary);">
-                        Register Here
+                    <a href="/westec_bms/auth/forgot_password.php" class="text-decoration-none small text-primary">
+                        Forgot Password?
                     </a>
                 </div>
             </form>
         </div>
 
-        <!-- Demonstration helper box for testing -->
-        <div class="content-section p-3 bg-light">
-            <h3 class="h6 fw-bold mb-2 text-dark"><i class="bi bi-info-circle-fill text-primary me-1"></i> Quick Test Credentials</h3>
-            <ul class="list-unstyled small mb-0">
-                <li><strong>Administrator:</strong> <code>admin</code> / <code>Admin@12345</code></li>
-                <li><strong>IT Manager:</strong> <code>manager_nkosi</code> / <code>Pass@12345</code></li>
-                <li><strong>Senior Tech:</strong> <code>tech_sbu</code> / <code>Pass@12345</code></li>
-            </ul>
-        </div>
     </div>
 </div>
 

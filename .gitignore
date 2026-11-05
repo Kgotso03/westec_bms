@@ -1,0 +1,28 @@
+# Environment and Secret Configurations
+config/mail.php
+
+# User Uploads (keep directory structure, exclude uploaded files)
+uploads/profile_photos/*
+!uploads/profile_photos/index.php
+uploads/*
+!uploads/index.php
+!uploads/profile_photos/
+
+# Application Logs & Temporary Storage
+storage/logs/*
+!storage/logs/.gitkeep
+storage/emails/*
+!storage/emails/.gitkeep
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

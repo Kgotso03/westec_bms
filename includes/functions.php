@@ -4,6 +4,9 @@
  * Global Utility Functions & Helpers
  */
 
+// Set standard timezone for WesTec Eswatini operations
+date_default_timezone_set('Africa/Mbabane');
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -144,6 +147,72 @@ function getPriorityBadge(string $priority): string {
         default => 'bg-light text-dark'
     };
     return '<span class="badge ' . $class . ' px-2 py-1">' . e($priority) . '</span>';
+}
+
+/**
+ * Retrieve the active system logo URL with cache busting timestamp.
+ */
+function getSystemLogoUrl(): string {
+    $baseDir = __DIR__ . '/../assets/images';
+    // Check if a custom logo is present
+    $extensions = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+    foreach ($extensions as $ext) {
+        $customFile = $baseDir . '/custom_logo.' . $ext;
+        if (file_exists($customFile)) {
+            return '/westec_bms/assets/images/custom_logo.' . $ext . '?v=' . filemtime($customFile);
+        }
+    }
+    // Fall back to standard logo
+    if (file_exists($baseDir . '/logo.jpg')) {
+        return '/westec_bms/assets/images/logo.jpg?v=' . filemtime($baseDir . '/logo.jpg');
+    }
+    if (file_exists($baseDir . '/default_logo.jpg')) {
+        return '/westec_bms/assets/images/default_logo.jpg?v=' . filemtime($baseDir . '/default_logo.jpg');
+    }
+    return '/westec_bms/assets/images/logo.jpg';
+}
+
+/**
+ * Retrieve user avatar photo URL, or null if no custom photo is uploaded.
+ */
+function getUserAvatarUrl(?array $user = null): ?string {
+    if ($user === null) {
+        if (!function_exists('getCurrentUser')) {
+            return null;
+        }
+        $user = getCurrentUser();
+    }
+    if (!$user) {
+        return null;
+    }
+
+    $photo = $user['profile_photo'] ?? null;
+    if (empty($photo) && isset($user['user_id'])) {
+        $photo = $_SESSION['profile_photo'] ?? null;
+    }
+
+    // If still empty and user_id is provided, try checking database
+    if (empty($photo) && !empty($user['user_id']) && function_exists('getDbConnection')) {
+        try {
+            $pdo = getDbConnection();
+            $stmt = $pdo->prepare("SELECT profile_photo FROM users WHERE user_id = :uid LIMIT 1");
+            $stmt->execute([':uid' => (int)$user['user_id']]);
+            $photo = $stmt->fetchColumn() ?: null;
+            if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $user['user_id']) {
+                $_SESSION['profile_photo'] = $photo;
+            }
+        } catch (Exception $e) {
+            $photo = null;
+        }
+    }
+
+    if (!empty($photo)) {
+        $filePath = __DIR__ . '/../uploads/profile_photos/' . $photo;
+        if (file_exists($filePath)) {
+            return '/westec_bms/uploads/profile_photos/' . $photo . '?v=' . filemtime($filePath);
+        }
+    }
+    return null;
 }
 
 /**

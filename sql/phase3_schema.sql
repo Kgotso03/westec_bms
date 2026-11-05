@@ -35,6 +35,7 @@ CREATE TABLE `users` (
     `role_id` INT NOT NULL,
     `email` VARCHAR(100) NULL,
     `status` ENUM('Active', 'Inactive', 'Suspended') NOT NULL DEFAULT 'Active',
+    `profile_photo` VARCHAR(255) NULL,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) 
@@ -70,10 +71,15 @@ CREATE TABLE `staff` (
     `job_title` VARCHAR(100) NOT NULL,
     `department` VARCHAR(80) DEFAULT 'IT Technical Services',
     `user_id` INT NULL UNIQUE,
+    `manager_id` INT NULL,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_staff_user` FOREIGN KEY (`user_id`) 
+        REFERENCES `users` (`user_id`) 
+        ON UPDATE CASCADE 
+        ON DELETE SET NULL,
+    CONSTRAINT `fk_staff_manager` FOREIGN KEY (`manager_id`) 
         REFERENCES `users` (`user_id`) 
         ON UPDATE CASCADE 
         ON DELETE SET NULL
@@ -194,6 +200,7 @@ CREATE TABLE `project_assignments` (
     `role_in_project` VARCHAR(100) NOT NULL DEFAULT 'Lead Engineer',
     `assigned_date` DATE NOT NULL,
     `notes` VARCHAR(255) NULL,
+    `assigned_by` INT NULL,
     CONSTRAINT `fk_proj_assign_project` FOREIGN KEY (`project_id`) 
         REFERENCES `projects` (`project_id`) 
         ON UPDATE CASCADE 
@@ -201,7 +208,11 @@ CREATE TABLE `project_assignments` (
     CONSTRAINT `fk_proj_assign_staff` FOREIGN KEY (`staff_id`) 
         REFERENCES `staff` (`staff_id`) 
         ON UPDATE CASCADE 
-        ON DELETE RESTRICT
+        ON DELETE RESTRICT,
+    CONSTRAINT `fk_proj_assign_manager` FOREIGN KEY (`assigned_by`) 
+        REFERENCES `users` (`user_id`) 
+        ON UPDATE CASCADE 
+        ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------------------------

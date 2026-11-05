@@ -8,7 +8,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-requireLogin();
+// Only System Administrator and IT Manager can access the Staff Directory
+requireRole(['Administrator', 'IT Manager']);
 
 $pdo = getDbConnection();
 $currentUser = getCurrentUser();
@@ -35,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jobTitle   = cleanInput($_POST['job_title'] ?? '');
         $department = cleanInput($_POST['department'] ?? 'IT Technical Services');
         $userId     = !empty($_POST['user_id']) ? (int)$_POST['user_id'] : null;
+        $managerId  = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
         $isActive   = isset($_POST['is_active']) ? 1 : 0;
 
         if (empty($fullName)) {
@@ -50,11 +52,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Job title / designation is required.';
         }
 
+        // Admin must specify which manager the staff is under
+        if (hasRole('Administrator')) {
+            if (empty($managerId)) {
+                $errors[] = 'Please specify which IT Manager this staff member reports under.';
+            }
+        } else {
+            // If an IT Manager is adding staff, default to themselves if unspecified
+            if (empty($managerId)) {
+                $managerId = (int)$currentUser['user_id'];
+            }
+        }
+
         if (empty($errors)) {
             try {
                 $stmt = $pdo->prepare("
-                    INSERT INTO staff (full_name, email, phone, job_title, department, user_id, is_active, created_at)
-                    VALUES (:name, :email, :phone, :job, :dept, :uid, :active, NOW())
+                    INSERT INTO staff (full_name, email, phone, job_title, department, user_id, manager_id, is_active, created_at)
+                    VALUES (:name, :email, :phone, :job, :dept, :uid, :mid, :active, NOW())
                 ");
                 $stmt->execute([
                     ':name'   => $fullName,
@@ -63,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':job'    => $jobTitle,
                     ':dept'   => $department,
                     ':uid'    => $userId,
+                    ':mid'    => $managerId,
                     ':active' => $isActive
                 ]);
 
@@ -85,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jobTitle   = cleanInput($_POST['job_title'] ?? '');
         $department = cleanInput($_POST['department'] ?? 'IT Technical Services');
         $userId     = !empty($_POST['user_id']) ? (int)$_POST['user_id'] : null;
+        $managerId  = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
         $isActive   = isset($_POST['is_active']) ? 1 : 0;
 
         if ($staffId <= 0) {
@@ -103,6 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Job title is required.';
         }
 
+        // Admin must specify which manager the staff is under
+        if (hasRole('Administrator') && empty($managerId)) {
+            $errors[] = 'Please specify which IT Manager this staff member reports under.';
+        }
+
         if (empty($errors)) {
             try {
                 $stmt = $pdo->prepare("
@@ -113,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         job_title = :job,
                         department = :dept,
                         user_id = :uid,
+                        manager_id = :mid,
                         is_active = :active
                     WHERE staff_id = :id
                 ");
@@ -123,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':job'    => $jobTitle,
                     ':dept'   => $department,
                     ':uid'    => $userId,
+                    ':mid'    => $managerId,
                     ':active' => $isActive,
                     ':id'     => $staffId
                 ]);
@@ -178,14 +201,29 @@ $usersStmt = $pdo->prepare("
 $usersStmt->execute([':current' => $currentLinkedUserId]);
 $availableUsers = $usersStmt->fetchAll();
 
-// Fetch all staff members with linked user info and ticket assignment count
+// Fetch available IT Managers for staff reporting assignment
+$managersStmt = $pdo->query("
+    SELECT u.user_id, u.username, u.email, s.full_name
+    FROM users u
+    JOIN roles r ON u.role_id = r.role_id
+    LEFT JOIN staff s ON s.user_id = u.user_id
+    WHERE r.role_name = 'IT Manager'
+    ORDER BY u.username ASC
+");
+$managersList = $managersStmt->fetchAll();
+
+// Fetch all staff members with linked user info, reporting manager, and ticket assignment count
 $staffList = $pdo->query("
-    SELECT s.*, u.username AS linked_username, r.role_name AS linked_role,
+    SELECT s.*, 
+           u.username AS linked_username, u.profile_photo, r.role_name AS linked_role,
+           m.username AS manager_username, ms.full_name AS manager_name,
            (SELECT COUNT(*) FROM tickets t WHERE t.assigned_staff_id = s.staff_id) AS assigned_tickets,
            (SELECT COUNT(*) FROM project_assignments pa WHERE pa.staff_id = s.staff_id) AS assigned_projects
     FROM staff s
     LEFT JOIN users u ON s.user_id = u.user_id
     LEFT JOIN roles r ON u.role_id = r.role_id
+    LEFT JOIN users m ON s.manager_id = m.user_id
+    LEFT JOIN staff ms ON ms.user_id = m.user_id
     ORDER BY s.is_active DESC, s.full_name ASC
 ")->fetchAll();
 
@@ -208,12 +246,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-person-badge-fill text-primary"></i>
+            <i data-lucide="badge-check" class="text-primary"></i>
             <?= $editStaff ? 'Edit Staff: ' . e($editStaff['full_name']) : 'Register New Staff Member' ?>
         </h2>
         <?php if ($editStaff): ?>
             <a href="/westec_bms/staff/index.php" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle me-1"></i> Cancel Edit
+                <i data-lucide="x-circle" class="me-1"></i> Cancel Edit
             </a>
         <?php endif; ?>
     </div>
@@ -259,6 +297,26 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
 
             <div class="col-md-6 col-lg-4">
+                <label for="manager_id" class="form-label">
+                    Reporting Manager <?= hasRole('Administrator') ? '<span class="text-danger">*</span>' : '' ?>
+                </label>
+                <select class="form-select" id="manager_id" name="manager_id" <?= hasRole('Administrator') ? 'required' : '' ?>>
+                    <option value="">-- Select Reporting Manager --</option>
+                    <?php foreach ($managersList as $mgr): ?>
+                        <?php 
+                            $defaultMgrId = $editStaff['manager_id'] ?? ($_POST['manager_id'] ?? ($currentUser['role_name'] === 'IT Manager' ? $currentUser['user_id'] : 0));
+                            $selectedMgr = ($defaultMgrId == $mgr['user_id']) ? 'selected' : '';
+                            $mgrDisplayName = !empty($mgr['full_name']) ? e($mgr['full_name']) . ' (' . e($mgr['username']) . ')' : e($mgr['username']);
+                        ?>
+                        <option value="<?= $mgr['user_id'] ?>" <?= $selectedMgr ?>>
+                            <?= $mgrDisplayName ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Specify the IT Manager overseeing this team member.</div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
                 <label for="user_id" class="form-label">Link to User Account</label>
                 <select class="form-select" id="user_id" name="user_id">
                     <option value="">-- No Linked System Account --</option>
@@ -281,7 +339,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-save me-1"></i> <?= $editStaff ? 'Save Changes' : 'Register Staff Member' ?>
+                <i data-lucide="save" class="me-1"></i> <?= $editStaff ? 'Save Changes' : 'Register Staff Member' ?>
             </button>
         </div>
     </form>
@@ -291,11 +349,11 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-people-fill text-primary"></i>
+            <i data-lucide="users" class="text-primary"></i>
             Staff Directory (<?= count($staffList) ?>)
         </h2>
         <div class="input-group input-group-sm" style="max-width: 250px;">
-            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+            <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
             <input type="text" class="form-control" placeholder="Search staff..." data-table-filter="staffTable">
         </div>
     </div>
@@ -307,6 +365,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>ID</th>
                     <th>Full Name & Role</th>
                     <th>Department</th>
+                    <th>Reporting Manager</th>
                     <th>Contact Info</th>
                     <th>Linked User Account</th>
                     <th class="text-center">Workload</th>
@@ -317,25 +376,47 @@ require_once __DIR__ . '/../includes/header.php';
             <tbody>
                 <?php if (empty($staffList)): ?>
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">No staff members registered.</td>
+                        <td colspan="9" class="text-center text-muted py-4">No staff members registered.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($staffList as $st): ?>
                         <tr>
                             <td><span class="badge bg-light text-dark border">#<?= $st['staff_id'] ?></span></td>
                             <td>
-                                <strong class="text-dark d-block"><?= e($st['full_name']) ?></strong>
-                                <span class="text-muted small"><?= e($st['job_title']) ?></span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <?php $stAvatar = getUserAvatarUrl(['profile_photo' => $st['profile_photo']]); ?>
+                                    <?php if ($stAvatar): ?>
+                                        <img src="<?= $stAvatar ?>" alt="<?= e($st['full_name']) ?>" class="rounded-circle border" style="width: 34px; height: 34px; object-fit: cover;">
+                                    <?php else: ?>
+                                        <div class="rounded-circle bg-light border text-primary d-inline-flex align-items-center justify-content-center fw-bold" style="width: 34px; height: 34px; font-size: 0.8rem;">
+                                            <?= strtoupper(substr($st['full_name'], 0, 2)) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div>
+                                        <strong class="text-dark d-block"><?= e($st['full_name']) ?></strong>
+                                        <span class="text-muted small"><?= e($st['job_title']) ?></span>
+                                    </div>
+                                </div>
                             </td>
                             <td><span class="badge bg-light text-secondary border"><?= e($st['department']) ?></span></td>
                             <td>
-                                <div class="small"><i class="bi bi-envelope me-1 text-muted"></i><?= e($st['email']) ?></div>
-                                <div class="small"><i class="bi bi-telephone me-1 text-muted"></i><?= e($st['phone']) ?></div>
+                                <?php if (!empty($st['manager_username'])): ?>
+                                    <span class="badge bg-light text-dark border">
+                                        <i data-lucide="shield" class="me-1 text-primary"></i>
+                                        <?= e($st['manager_name'] ?: $st['manager_username']) ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="text-muted small"><em>Unassigned</em></span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <div class="small"><i data-lucide="mail" class="me-1 text-muted"></i><?= e($st['email']) ?></div>
+                                <div class="small"><i data-lucide="phone" class="me-1 text-muted"></i><?= e($st['phone']) ?></div>
                             </td>
                             <td>
                                 <?php if ($st['linked_username']): ?>
                                     <span class="badge bg-info text-dark">
-                                        <i class="bi bi-person-check me-1"></i><?= e($st['linked_username']) ?>
+                                        <i data-lucide="user-check" class="me-1"></i><?= e($st['linked_username']) ?>
                                     </span>
                                     <span class="d-block small text-muted"><?= e($st['linked_role']) ?></span>
                                 <?php else: ?>
@@ -356,7 +437,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <a href="/westec_bms/staff/index.php?edit=<?= $st['staff_id'] ?>" class="btn btn-outline-secondary" title="Edit Staff Details">
-                                        <i class="bi bi-pencil-square"></i>
+                                        <i data-lucide="file-edit"></i>
                                     </a>
                                     <!-- Toggle Active Status Form -->
                                     <form method="POST" action="/westec_bms/staff/index.php" class="d-inline">
@@ -365,7 +446,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         <input type="hidden" name="staff_id" value="<?= $st['staff_id'] ?>">
                                         <input type="hidden" name="new_status" value="<?= $st['is_active'] ? 0 : 1 ?>">
                                         <button type="submit" class="btn <?= $st['is_active'] ? 'btn-outline-warning' : 'btn-outline-success' ?>" title="<?= $st['is_active'] ? 'Deactivate' : 'Activate' ?>">
-                                            <i class="bi <?= $st['is_active'] ? 'bi-person-slash' : 'bi-person-check' ?>"></i>
+                                            <i data-lucide="<?= $st['is_active'] ? 'user-x' : 'user-check' ?>"></i>
                                         </button>
                                     </form>
                                 </div>

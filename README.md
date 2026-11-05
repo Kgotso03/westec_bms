@@ -62,9 +62,7 @@ westec_bms/
 │   ├── trigger_demo.php               # Interactive trigger testing lab (metadata + live executions)
 │   └── audit_logs.php                 # System audit trail viewer for trigger and security records
 ├── sql/
-│   ├── phase3_schema.sql              # Relational schema for all 12 tables + Phase 3 triggers
-│   ├── phase4_additional_triggers.sql # Phase 4 user registration audit trigger
-│   ├── phase3_seed_data.sql           # Realistic baseline data for WesTec Eswatini
+│   ├── schema.sql                     # Complete unified schema (13 tables, 6 triggers, baseline roles & admin)
 │   └── setup_database.php             # Automated database installation & verification runner
 ├── tests/
 │   └── run_tests.php                  # Automated 15-point verification test suite (100% PASS)
@@ -127,7 +125,7 @@ All triggers are installed directly into MySQL and execute autonomously on the d
    cd C:\xampp\htdocs\westec_bms
    php sql/setup_database.php
    ```
-   *This automatically creates `westec_bms`, applies `phase3_schema.sql`, installs all 6 triggers, and imports seed data.*
+   *This automatically creates `westec_bms`, applies `schema.sql` (all 13 tables, 6 triggers, and baseline data).*
 3. Open your web browser and navigate to:  
    **`http://localhost/westec_bms/`**
 
@@ -138,9 +136,6 @@ All triggers are installed directly into MySQL and execute autonomously on the d
 | Role | Username | Password | Access Privileges |
 |------|----------|----------|-------------------|
 | **Administrator** | `admin` | `Admin@12345` | Full administrative access, trigger labs, user role assignments. |
-| **IT Manager** | `manager_nkosi` | `Pass@12345` | Projects, tickets, inventory, reporting. |
-| **Senior Technician** | `tech_sbu` | `Pass@12345` | Service ticket dispatch and milestone updates. |
-| **Support Specialist** | `support_thabo` | `Pass@12345` | Ticket intake and client directory management. |
 
 ---
 

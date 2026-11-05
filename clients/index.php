@@ -176,12 +176,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-building-add text-primary"></i>
+            <i data-lucide="building-2" class="text-primary"></i>
             <?= $editClient ? 'Edit Client: ' . e($editClient['client_name']) : 'Add New Client' ?>
         </h2>
         <?php if ($editClient): ?>
             <a href="/westec_bms/clients/index.php" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle me-1"></i> Cancel Editing
+                <i data-lucide="x-circle" class="me-1"></i> Cancel Editing
             </a>
         <?php endif; ?>
     </div>
@@ -222,7 +222,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-save me-1"></i> <?= $editClient ? 'Update Client Record' : 'Save Client' ?>
+                <i data-lucide="save" class="me-1"></i> <?= $editClient ? 'Update Client Record' : 'Save Client' ?>
             </button>
         </div>
     </form>
@@ -232,12 +232,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-list-ul text-primary"></i>
+            <i data-lucide="list" class="text-primary"></i>
             Registered Clients Directory (<?= count($clients) ?>)
         </h2>
         <div class="d-flex gap-2">
             <div class="input-group input-group-sm" style="max-width: 250px;">
-                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
                 <input type="text" class="form-control" placeholder="Search clients..." data-table-filter="clientsTable">
             </div>
         </div>
@@ -271,10 +271,10 @@ require_once __DIR__ . '/../includes/header.php';
                             <td><?= e($client['contact_person'] ?? '—') ?></td>
                             <td>
                                 <a href="mailto:<?= e($client['email']) ?>" class="text-decoration-none">
-                                    <i class="bi bi-envelope me-1 text-muted"></i><?= e($client['email']) ?>
+                                    <i data-lucide="mail" class="me-1 text-muted"></i><?= e($client['email']) ?>
                                 </a>
                             </td>
-                            <td><i class="bi bi-telephone me-1 text-muted"></i><?= e($client['phone']) ?></td>
+                            <td><i data-lucide="phone" class="me-1 text-muted"></i><?= e($client['phone']) ?></td>
                             <td><small class="text-muted"><?= e($client['address'] ?? '—') ?></small></td>
                             <td class="text-center">
                                 <span class="badge bg-primary rounded-pill"><?= $client['ticket_count'] ?></span>
@@ -285,14 +285,14 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <a href="/westec_bms/clients/index.php?edit=<?= $client['client_id'] ?>" class="btn btn-outline-secondary" title="Edit Client">
-                                        <i class="bi bi-pencil-square"></i>
+                                        <i data-lucide="file-edit"></i>
                                     </a>
                                     <form method="POST" action="/westec_bms/clients/index.php" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="client_id" value="<?= $client['client_id'] ?>">
                                         <button type="submit" class="btn btn-outline-danger" title="Delete Client" data-confirm-delete="Are you sure you want to delete client '<?= e($client['client_name']) ?>'? Note: Deletion will be rejected by the database if tickets or projects are attached.">
-                                            <i class="bi bi-trash"></i>
+                                            <i data-lucide="trash-2"></i>
                                         </button>
                                     </form>
                                 </div>

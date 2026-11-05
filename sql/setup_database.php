@@ -84,17 +84,9 @@ try {
         }
     }
 
-    echo "[*] Importing schema and triggers from sql/phase3_schema.sql...\n";
-    executeSqlFile($pdo, __DIR__ . '/phase3_schema.sql');
-    echo "[✓] Schema created successfully.\n";
-
-    echo "[*] Importing additional triggers from sql/phase4_additional_triggers.sql...\n";
-    executeSqlFile($pdo, __DIR__ . '/phase4_additional_triggers.sql');
-    echo "[✓] Additional triggers applied.\n";
-
-    echo "[*] Seeding initial demonstration data from sql/phase3_seed_data.sql...\n";
-    executeSqlFile($pdo, __DIR__ . '/phase3_seed_data.sql');
-    echo "[✓] Seed data imported.\n";
+    echo "[*] Importing schema, triggers, and baseline data from sql/schema.sql...\n";
+    executeSqlFile($pdo, __DIR__ . '/schema.sql');
+    echo "[✓] Schema, triggers, and baseline data imported successfully.\n";
 
     // 3. Verification of tables
     $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);

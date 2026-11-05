@@ -8,13 +8,14 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-requireLogin();
+requireRole(['Administrator', 'IT Manager']);
 
 $pdo = getDbConnection();
 $currentUser = getCurrentUser();
 
 $errors = [];
 $selectedProjectId = (int)($_GET['project_id'] ?? 0);
+$selectedStaffId   = (int)($_GET['staff_id']   ?? 0);
 
 // Handle Form Submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -41,6 +42,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($staffId <= 0) {
             $errors[] = 'Please select a staff member to assign.';
         }
+        // IT Manager: verify the selected staff is under their team
+        if (hasRole('IT Manager') && $staffId > 0) {
+            $chk = $pdo->prepare("SELECT staff_id FROM staff WHERE staff_id = :sid AND manager_id = :mid AND is_active = 1");
+            $chk->execute([':sid' => $staffId, ':mid' => $currentUser['user_id']]);
+            if (!$chk->fetch()) {
+                $errors[] = 'You can only assign staff members from your own team.';
+            }
+        }
 
         if (empty($errors)) {
             try {
@@ -51,15 +60,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $errors[] = 'This engineer is already assigned to this project. Please update the existing assignment if needed.';
                 } else {
                     $stmt = $pdo->prepare("
-                        INSERT INTO project_assignments (project_id, staff_id, role_in_project, assigned_date, notes)
-                        VALUES (:pid, :sid, :role, :adate, :notes)
+                        INSERT INTO project_assignments (project_id, staff_id, role_in_project, assigned_date, notes, assigned_by)
+                        VALUES (:pid, :sid, :role, :adate, :notes, :aby)
                     ");
                     $stmt->execute([
                         ':pid'   => $projectId,
                         ':sid'   => $staffId,
                         ':role'  => $roleInProject,
                         ':adate' => $assignedDate,
-                        ':notes' => !empty($notes) ? $notes : null
+                        ':notes' => !empty($notes) ? $notes : null,
+                        ':aby'   => $currentUser['user_id']
+                    ]);
+                    $newId = $pdo->lastInsertId();
+
+                    // Audit log
+                    $pdo->prepare("
+                        INSERT INTO audit_logs (user_id, action, table_affected, record_id, details, ip_address, created_at)
+                        VALUES (?, 'PROJECT_ASSIGNMENT', 'project_assignments', ?, ?, ?, NOW())
+                    ")->execute([
+                        $currentUser['user_id'],
+                        $newId,
+                        "'{$currentUser['username']}' assigned staff #{$staffId} to project #{$projectId} as '{$roleInProject}'.",
+                        $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
                     ]);
 
                     setFlash('success', 'Staff member successfully assigned to the project.');
@@ -93,18 +115,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch lists for dropdowns
 $projectsList = $pdo->query("SELECT project_id, project_name FROM projects ORDER BY project_name ASC")->fetchAll();
-$staffList = $pdo->query("SELECT staff_id, full_name, job_title FROM staff WHERE is_active = 1 ORDER BY full_name ASC")->fetchAll();
 
-// Fetch assignments
+// Staff list — IT Manager sees only their team
+if (hasRole('Administrator')) {
+    $staffList = $pdo->query("SELECT staff_id, full_name, job_title FROM staff WHERE is_active = 1 ORDER BY full_name ASC")->fetchAll();
+} else {
+    $stStmt = $pdo->prepare("SELECT staff_id, full_name, job_title FROM staff WHERE is_active = 1 AND manager_id = :mid ORDER BY full_name ASC");
+    $stStmt->execute([':mid' => $currentUser['user_id']]);
+    $staffList = $stStmt->fetchAll();
+}
+
+// Fetch assignments — join assigned_by user info
 $query = "
-    SELECT pa.*, p.project_name, c.client_name, s.full_name, s.job_title, s.phone, s.email
+    SELECT pa.*, p.project_name, c.client_name, s.full_name, s.job_title, s.phone, s.email,
+           u.username AS assigned_by_name
     FROM project_assignments pa
     JOIN projects p ON pa.project_id = p.project_id
     JOIN clients c ON p.client_id = c.client_id
     JOIN staff s ON pa.staff_id = s.staff_id
+    LEFT JOIN users u ON pa.assigned_by = u.user_id
 ";
 $params = [];
-if ($selectedProjectId > 0) {
+if (hasRole('IT Manager')) {
+    $query .= " WHERE s.manager_id = :mid";
+    $params[':mid'] = $currentUser['user_id'];
+    if ($selectedProjectId > 0) {
+        $query .= " AND pa.project_id = :pid";
+        $params[':pid'] = $selectedProjectId;
+    }
+} elseif ($selectedProjectId > 0) {
     $query .= " WHERE pa.project_id = :pid";
     $params[':pid'] = $selectedProjectId;
 }
@@ -121,13 +160,13 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Quick Navigation Bar for Projects Suite -->
 <div class="d-flex gap-2 mb-3">
     <a href="/westec_bms/projects/index.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-diagram-3-fill me-1"></i> Projects Overview
+        <i data-lucide="workflow" class="me-1"></i> Projects Overview
     </a>
     <a href="/westec_bms/projects/milestones.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-flag-fill me-1"></i> Milestones Management
+        <i data-lucide="flag" class="me-1"></i> Milestones Management
     </a>
     <a href="/westec_bms/projects/assignments.php" class="btn btn-westec btn-sm">
-        <i class="bi bi-person-lines-fill me-1"></i> Team Staff Assignments
+        <i data-lucide="users" class="me-1"></i> Team Staff Assignments
     </a>
 </div>
 
@@ -145,7 +184,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-person-plus-fill text-primary"></i>
+            <i data-lucide="user-plus" class="text-primary"></i>
             Assign Staff Member to Project Team
         </h2>
     </div>
@@ -172,7 +211,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <select class="form-select" id="staff_id" name="staff_id" required>
                     <option value="">-- Select Staff Member --</option>
                     <?php foreach ($staffList as $s): ?>
-                        <option value="<?= $s['staff_id'] ?>">
+                        <option value="<?= $s['staff_id'] ?>" <?= ($selectedStaffId == $s['staff_id']) ? 'selected' : '' ?>>
                             <?= e($s['full_name']) ?> (<?= e($s['job_title']) ?>)
                         </option>
                     <?php endforeach; ?>
@@ -197,7 +236,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-check2-circle me-1"></i> Save Assignment
+                <i data-lucide="check-circle-2" class="me-1"></i> Save Assignment
             </button>
         </div>
     </form>
@@ -207,7 +246,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-people-fill text-primary"></i>
+            <i data-lucide="users" class="text-primary"></i>
             Active Project Staff Allocations (<?= count($assignments) ?>)
         </h2>
         <div class="d-flex gap-2">
@@ -223,7 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </select>
             </form>
             <div class="input-group input-group-sm" style="max-width: 200px;">
-                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
                 <input type="text" class="form-control" placeholder="Search..." data-table-filter="assignTable">
             </div>
         </div>
@@ -238,20 +277,21 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Assigned Role</th>
                     <th>Assigned Date</th>
                     <th>Responsibility Scope</th>
+                    <th>Assigned By</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($assignments)): ?>
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">No staff assignments found for this view.</td>
+                        <td colspan="7" class="text-center text-muted py-4">No staff assignments found for this view.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($assignments as $a): ?>
                         <tr>
                             <td>
                                 <strong class="text-dark d-block"><?= e($a['full_name']) ?></strong>
-                                <small class="text-muted"><i class="bi bi-telephone me-1"></i><?= e($a['phone']) ?></small>
+                                <small class="text-muted"><i data-lucide="phone" class="me-1"></i><?= e($a['phone']) ?></small>
                             </td>
                             <td>
                                 <strong class="text-dark d-block"><?= e($a['project_name']) ?></strong>
@@ -260,6 +300,15 @@ require_once __DIR__ . '/../includes/header.php';
                             <td><span class="badge bg-primary text-white"><?= e($a['role_in_project']) ?></span></td>
                             <td><?= formatDate($a['assigned_date'], 'd M Y') ?></td>
                             <td><small class="text-muted"><?= e($a['notes'] ?? 'General technical support') ?></small></td>
+                            <td>
+                                <?php if (!empty($a['assigned_by_name'])): ?>
+                                    <small class="text-muted">
+                                        <i data-lucide="user-check" class="me-1"></i><?= e($a['assigned_by_name']) ?>
+                                    </small>
+                                <?php else: ?>
+                                    <small class="text-muted">—</small>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end">
                                 <form method="POST" action="/westec_bms/projects/assignments.php" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
@@ -267,7 +316,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <input type="hidden" name="assignment_id" value="<?= $a['assignment_id'] ?>">
                                     <input type="hidden" name="project_id" value="<?= $a['project_id'] ?>">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove Assignment" data-confirm-delete="Remove this staff member from project?">
-                                        <i class="bi bi-person-x"></i> Remove
+                                        <i data-lucide="user-x"></i> Remove
                                     </button>
                                 </form>
                             </td>

@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id'    => $ticketId
                 ]);
 
-                setFlash('success', "Ticket updated successfully. Trigger `trg_after_ticket_status_update` recorded state transitions.");
+                setFlash('success', "Ticket updated successfully.");
                 header('Location: /westec_bms/tickets/index.php');
                 exit;
             } catch (Exception $e) {
@@ -213,12 +213,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-ticket-detailed-fill text-primary"></i>
+            <i data-lucide="ticket" class="text-primary"></i>
             <?= $editTicket ? 'Update Service Ticket: #' . e($editTicket['ticket_number']) : 'Log New Service Ticket' ?>
         </h2>
         <?php if ($editTicket): ?>
             <a href="/westec_bms/tickets/index.php" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle me-1"></i> Cancel Edit
+                <i data-lucide="x-circle" class="me-1"></i> Cancel Edit
             </a>
         <?php endif; ?>
     </div>
@@ -292,7 +292,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-save me-1"></i> <?= $editTicket ? 'Update Service Ticket' : 'Dispatch Ticket' ?>
+                <i data-lucide="save" class="me-1"></i> <?= $editTicket ? 'Update Service Ticket' : 'Dispatch Ticket' ?>
             </button>
         </div>
     </form>
@@ -330,10 +330,10 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="col-md-3 d-flex gap-2">
             <button type="submit" class="btn btn-sm btn-westec w-100">
-                <i class="bi bi-filter me-1"></i> Apply Filter
+                <i data-lucide="filter" class="me-1"></i> Apply Filter
             </button>
             <a href="/westec_bms/tickets/index.php" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
-                <i class="bi bi-arrow-counterclockwise"></i>
+                <i data-lucide="rotate-ccw"></i>
             </a>
         </div>
     </form>
@@ -343,11 +343,11 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-list-check text-primary"></i>
+            <i data-lucide="list-checks" class="text-primary"></i>
             Service Tickets Directory (<?= count($tickets) ?>)
         </h2>
         <div class="input-group input-group-sm" style="max-width: 250px;">
-            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+            <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
             <input type="text" class="form-control" placeholder="Search table..." data-table-filter="ticketsTable">
         </div>
     </div>
@@ -394,12 +394,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <td>
                                 <div class="small text-muted">In: <?= formatDate($t['created_at'], 'd M, H:i') ?></div>
                                 <?php if ($t['resolved_at']): ?>
-                                    <div class="small text-success"><i class="bi bi-check-all me-1"></i>Out: <?= formatDate($t['resolved_at'], 'd M, H:i') ?></div>
+                                    <div class="small text-success"><i data-lucide="check-check" class="me-1"></i>Out: <?= formatDate($t['resolved_at'], 'd M, H:i') ?></div>
                                 <?php endif; ?>
                             </td>
                             <td class="text-end">
                                 <a href="/westec_bms/tickets/index.php?edit=<?= $t['ticket_id'] ?>" class="btn btn-sm btn-outline-secondary" title="Edit / Update Ticket Status">
-                                    <i class="bi bi-pencil-square"></i>
+                                    <i data-lucide="file-edit"></i>
                                 </a>
                             </td>
                         </tr>

@@ -8,7 +8,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-requireLogin();
+// Enforce role-based access: Administrator and IT Manager only
+requireRole(['Administrator', 'IT Manager']);
 
 $pdo = getDbConnection();
 $currentUser = getCurrentUser();
@@ -45,9 +46,29 @@ $actionTypes = $pdo->query("SELECT DISTINCT action FROM audit_logs ORDER BY acti
 $tablesList  = $pdo->query("SELECT DISTINCT table_affected FROM audit_logs ORDER BY table_affected ASC")->fetchAll(PDO::FETCH_COLUMN);
 
 $pageTitle = 'Audit Trail Ledger';
-$pageSubtitle = 'Complete System Governance, Security Events & Database Trigger Records';
+$pageSubtitle = 'Complete System Governance, Security Events & Operations Activity Records';
 require_once __DIR__ . '/../includes/header.php';
 ?>
+
+<!-- Quick Navigation Bar for Admin Suite -->
+<div class="d-flex gap-2 mb-4">
+    <?php if (hasRole('Administrator')): ?>
+    <a href="/westec_bms/admin/user_management.php" class="btn btn-outline-secondary btn-sm">
+        <i data-lucide="users" class="me-1"></i> User Management
+    </a>
+    <?php endif; ?>
+    <a href="/westec_bms/admin/audit_logs.php" class="btn btn-westec btn-sm">
+        <i data-lucide="book-open" class="me-1"></i> Audit Trail Logs
+    </a>
+    <a href="/westec_bms/admin/inventory_access.php" class="btn btn-outline-secondary btn-sm">
+        <i data-lucide="shield" class="me-1"></i> Inventory Access Control
+    </a>
+    <?php if (hasRole('Administrator')): ?>
+    <a href="/westec_bms/admin/system_settings.php" class="btn btn-outline-secondary btn-sm">
+        <i data-lucide="image" class="me-1"></i> System Branding &amp; Logo
+    </a>
+    <?php endif; ?>
+</div>
 
 <!-- Filter Bar -->
 <div class="content-section p-3 mb-3 bg-light">
@@ -72,10 +93,10 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="col-md-4 d-flex gap-2">
             <button type="submit" class="btn btn-sm btn-westec w-100">
-                <i class="bi bi-funnel me-1"></i> Filter Logs
+                <i data-lucide="filter" class="me-1"></i> Filter Logs
             </button>
             <a href="/westec_bms/admin/audit_logs.php" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
-                <i class="bi bi-arrow-counterclockwise"></i>
+                <i data-lucide="rotate-ccw"></i>
             </a>
         </div>
     </form>
@@ -85,11 +106,11 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-journal-text text-primary"></i>
+            <i data-lucide="book-open" class="text-primary"></i>
             Audit Trail Records (<?= count($logs) ?>)
         </h2>
         <div class="input-group input-group-sm" style="max-width: 250px;">
-            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+            <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
             <input type="text" class="form-control" placeholder="Search logs..." data-table-filter="auditTable">
         </div>
     </div>
@@ -105,7 +126,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Record ID</th>
                     <th>User / Subject</th>
                     <th>IP Address</th>
-                    <th>Audit Details & Trigger Payload</th>
+                    <th>Audit Details & Activity Description</th>
                 </tr>
             </thead>
             <tbody>
@@ -135,7 +156,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <strong class="text-dark small d-block"><?= e($log['username']) ?></strong>
                                     <small class="text-muted"><?= e($log['role_name']) ?></small>
                                 <?php else: ?>
-                                    <span class="text-muted small"><em>System / Trigger</em></span>
+                                    <span class="text-muted small"><em>System Automated</em></span>
                                 <?php endif; ?>
                             </td>
                             <td><small class="text-muted font-monospace"><?= e($log['ip_address']) ?></small></td>

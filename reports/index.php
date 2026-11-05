@@ -126,7 +126,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="col-md-4">
             <button type="submit" class="btn btn-sm btn-westec w-100">
-                <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Save Report Snapshot
+                <i data-lucide="file-down" class="me-1"></i> Save Report Snapshot
             </button>
         </div>
     </form>
@@ -136,7 +136,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-ticket-detailed-fill text-primary"></i>
+            <i data-lucide="ticket" class="text-primary"></i>
             Service Tickets & Client SLA Distribution
         </h2>
         <span class="badge bg-light text-dark border">Multi-Table Join: clients + tickets</span>
@@ -190,7 +190,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-cash-stack text-success"></i>
+            <i data-lucide="banknote" class="text-success"></i>
             IT Inventory Stock Valuation by Category
         </h2>
         <span class="badge bg-success text-white">Total Valuation: <?= formatCurrency($totalInventoryValuation) ?></span>
@@ -232,7 +232,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-person-workspace text-primary"></i>
+            <i data-lucide="laptop" class="text-primary"></i>
             Staff Technical Workload & Project Deployment
         </h2>
         <span class="badge bg-light text-dark border">Multi-Table Join: staff + tickets + project_assignments</span>
@@ -272,7 +272,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-archive text-secondary"></i>
+            <i data-lucide="archive" class="text-secondary"></i>
             Archived Management Reports (service_reports)
         </h2>
     </div>

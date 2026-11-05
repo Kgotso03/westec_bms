@@ -10,6 +10,17 @@ require_once __DIR__ . '/../includes/auth.php';
 
 requireLogin();
 
+// ── Access Control ──────────────────────────────────────────────────────────
+// Admins & IT Managers always get full access.
+// All other roles require an explicit grant from the manager.
+$invPerms = getInventoryPermissions();
+
+if (!$invPerms['can_view']) {
+    setFlash('danger', 'Access Denied: You do not have permission to access the Inventory module. Please contact your IT Manager.');
+    header('Location: /westec_bms/dashboard/index.php');
+    exit;
+}
+
 $pdo = getDbConnection();
 $currentUser = getCurrentUser();
 
@@ -29,11 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 1. ADD INVENTORY CATALOG ITEM (Initial stock starts at 0; must be received via transaction)
     if ($action === 'add_item') {
-        $sku          = strtoupper(cleanInput($_POST['sku'] ?? ''));
-        $itemName     = cleanInput($_POST['item_name'] ?? '');
-        $category     = cleanInput($_POST['category'] ?? '');
-        $unitPrice    = (float)($_POST['unit_price'] ?? 0);
-        $reorderLevel = (int)($_POST['reorder_level'] ?? 5);
+        if (!$invPerms['can_add_item']) {
+            setFlash('danger', 'Access Denied: You do not have permission to add catalog items.');
+            header('Location: /westec_bms/inventory/index.php');
+            exit;
+        }
+
+        $sku            = strtoupper(cleanInput($_POST['sku'] ?? ''));
+        $itemName       = cleanInput($_POST['item_name'] ?? '');
+        $categorySelect = cleanInput($_POST['category_select'] ?? $_POST['category'] ?? '');
+        $customCategory = cleanInput($_POST['custom_category'] ?? '');
+        $category       = ($categorySelect === '__NEW__') ? $customCategory : (!empty($categorySelect) ? $categorySelect : $customCategory);
+        $unitPrice      = (float)($_POST['unit_price'] ?? 0);
+        $reorderLevel   = (int)($_POST['reorder_level'] ?? 5);
+        $initialStock   = max(0, (int)($_POST['initial_stock'] ?? 0));
 
         if (empty($sku)) {
             $errors[] = 'SKU (Stock Keeping Unit) is required.';
@@ -42,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Item description / model name is required.';
         }
         if (empty($category)) {
-            $errors[] = 'Category is required.';
+            $errors[] = 'Category is required. Please select or type a category.';
         }
         if ($unitPrice < 0) {
             $errors[] = 'Unit price cannot be negative.';
@@ -53,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             try {
-                // Insert new item with quantity_in_stock = 0. Stock changes MUST occur via inventory_transactions triggers
+                // Insert new catalog item
                 $stmt = $pdo->prepare("
                     INSERT INTO inventory (sku, item_name, category, quantity_in_stock, unit_price, reorder_level, created_at)
                     VALUES (:sku, :name, :cat, 0, :price, :reorder, NOW())
@@ -67,7 +87,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $newId = (int)$pdo->lastInsertId();
-                setFlash('success', "Item '{$itemName}' ({$sku}) added to catalog. Record an 'IN' stock transaction below to populate stock.");
+
+                // If starting stock is specified, record initial IN transaction (triggers update stock autonomously)
+                if ($initialStock > 0 && $invPerms['can_record_transaction']) {
+                    $txStmt = $pdo->prepare("
+                        INSERT INTO inventory_transactions (item_id, transaction_type, quantity, unit_cost, reference_note, created_by, transaction_date)
+                        VALUES (:item, 'IN', :qty, :cost, :note, :user, NOW())
+                    ");
+                    $txStmt->execute([
+                        ':item' => $newId,
+                        ':qty'  => $initialStock,
+                        ':cost' => $unitPrice,
+                        ':note' => 'Initial inventory stock registered',
+                        ':user' => $currentUser['user_id']
+                    ]);
+                    setFlash('success', "Item '{$itemName}' ({$sku}) added to catalog with {$initialStock} units in stock.");
+                } else {
+                    setFlash('success', "Item '{$itemName}' ({$sku}) added to catalog.");
+                }
+
                 header('Location: /westec_bms/inventory/index.php');
                 exit;
             } catch (Exception $e) {
@@ -78,12 +116,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 2. EDIT CATALOG ITEM DETAILS (Stock count CANNOT be altered here - rule compliance)
     elseif ($action === 'edit_item') {
-        $itemId       = (int)($_POST['item_id'] ?? 0);
-        $sku          = strtoupper(cleanInput($_POST['sku'] ?? ''));
-        $itemName     = cleanInput($_POST['item_name'] ?? '');
-        $category     = cleanInput($_POST['category'] ?? '');
-        $unitPrice    = (float)($_POST['unit_price'] ?? 0);
-        $reorderLevel = (int)($_POST['reorder_level'] ?? 5);
+        if (!$invPerms['can_edit_item']) {
+            setFlash('danger', 'Access Denied: You do not have permission to edit catalog items.');
+            header('Location: /westec_bms/inventory/index.php');
+            exit;
+        }
+
+        $itemId         = (int)($_POST['item_id'] ?? 0);
+        $sku            = strtoupper(cleanInput($_POST['sku'] ?? ''));
+        $itemName       = cleanInput($_POST['item_name'] ?? '');
+        $categorySelect = cleanInput($_POST['category_select'] ?? $_POST['category'] ?? '');
+        $customCategory = cleanInput($_POST['custom_category'] ?? '');
+        $category       = ($categorySelect === '__NEW__') ? $customCategory : (!empty($categorySelect) ? $categorySelect : $customCategory);
+        $unitPrice      = (float)($_POST['unit_price'] ?? 0);
+        $reorderLevel   = (int)($_POST['reorder_level'] ?? 5);
+        $addStockQty    = max(0, (int)($_POST['add_stock_qty'] ?? 0));
+        $stockNote      = cleanInput($_POST['stock_note'] ?? '');
 
         if ($itemId <= 0) {
             $errors[] = 'Invalid item identifier.';
@@ -93,6 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (empty($itemName)) {
             $errors[] = 'Item name is required.';
+        }
+        if (empty($category)) {
+            $errors[] = 'Category is required. Please select or type a category.';
         }
 
         if (empty($errors)) {
@@ -115,7 +166,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id'      => $itemId
                 ]);
 
-                setFlash('success', "Catalog details for '{$itemName}' updated successfully.");
+                // If stock was added during edit, record an IN transaction
+                if ($addStockQty > 0 && $invPerms['can_record_transaction']) {
+                    $txStmt = $pdo->prepare("
+                        INSERT INTO inventory_transactions (item_id, transaction_type, quantity, unit_cost, reference_note, created_by, transaction_date)
+                        VALUES (:item, 'IN', :qty, :cost, :note, :user, NOW())
+                    ");
+                    $txStmt->execute([
+                        ':item' => $itemId,
+                        ':qty'  => $addStockQty,
+                        ':cost' => $unitPrice,
+                        ':note' => !empty($stockNote) ? $stockNote : 'Stock added during catalog item edit',
+                        ':user' => $currentUser['user_id']
+                    ]);
+                    setFlash('success', "Catalog details updated and +{$addStockQty} units added to stock for '{$itemName}'.");
+                } else {
+                    setFlash('success', "Catalog details for '{$itemName}' updated successfully.");
+                }
+
                 header('Location: /westec_bms/inventory/index.php');
                 exit;
             } catch (Exception $e) {
@@ -126,6 +194,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 3. RECORD INVENTORY TRANSACTION (Trigger trg_check_inventory_stock_before_insert & trg_update_inventory_stock_after_insert)
     elseif ($action === 'record_transaction') {
+        if (!$invPerms['can_record_transaction']) {
+            setFlash('danger', 'Access Denied: You do not have permission to record stock transactions.');
+            header('Location: /westec_bms/inventory/index.php');
+            exit;
+        }
+
         $itemId          = (int)($_POST['trans_item_id'] ?? 0);
         $transactionType = cleanInput($_POST['transaction_type'] ?? '');
         $quantity        = (int)($_POST['quantity'] ?? 0);
@@ -178,12 +252,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch edit target if requested
-if (isset($_GET['edit'])) {
+// Fetch edit target if requested (only if user can edit)
+if (isset($_GET['edit']) && $invPerms['can_edit_item']) {
     $editId = (int)$_GET['edit'];
     $stmt = $pdo->prepare("SELECT * FROM inventory WHERE item_id = :id");
     $stmt->execute([':id' => $editId]);
     $editItem = $stmt->fetch();
+} elseif (isset($_GET['edit']) && !$invPerms['can_edit_item']) {
+    setFlash('warning', 'You do not have permission to edit catalog items.');
 }
 
 // Fetch all inventory items
@@ -193,6 +269,22 @@ $inventoryItems = $pdo->query("
     FROM inventory i
     ORDER BY (i.quantity_in_stock <= i.reorder_level) DESC, i.category ASC, i.item_name ASC
 ")->fetchAll();
+
+// Fetch distinct categories already in the DB (so custom ones reappear in the list)
+$existingCats = $pdo->query("SELECT DISTINCT category FROM inventory WHERE category IS NOT NULL AND category != '' ORDER BY category ASC")->fetchAll(PDO::FETCH_COLUMN);
+
+$defaultCats = [
+    'Networking Hardware',
+    'Wireless Solutions',
+    'Cabling & Structured Cabling',
+    'Server Hardware',
+    'Network Security',
+    'Rack Accessories',
+    'Software Licenses',
+    'Peripherals'
+];
+$allCategories = array_values(array_unique(array_filter(array_merge($defaultCats, $existingCats))));
+sort($allCategories);
 
 // Fetch recent 10 transactions
 $recentTransactions = $pdo->query("
@@ -212,7 +304,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (!empty($errors)): ?>
     <div class="alert alert-danger mb-4 shadow-sm" role="alert">
         <div class="d-flex align-items-center mb-1">
-            <i class="bi bi-shield-x me-2 fs-5"></i>
+            <i data-lucide="shield-x" class="me-2 fs-5"></i>
             <strong class="fs-6">Database Validation Rejected Operation:</strong>
         </div>
         <ul class="mb-0 ps-3">
@@ -223,23 +315,48 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<!-- Inventory Access Permission Summary Bar -->
+<div class="content-section p-3 mb-4 d-flex flex-wrap align-items-center gap-2">
+    <span class="fw-semibold text-muted small me-2"><i data-lucide="shield" class="me-1"></i>Your Inventory Access:</span>
+    <span class="badge <?= $invPerms['can_view']               ? 'bg-success' : 'bg-secondary' ?> px-3 py-2">
+        <i data-lucide="eye" class="me-1"></i>View Catalog
+    </span>
+    <span class="badge <?= $invPerms['can_record_transaction'] ? 'bg-success' : 'bg-secondary' ?> px-3 py-2">
+        <i data-lucide="arrow-left-right" class="me-1"></i>Record Transactions
+    </span>
+    <span class="badge <?= $invPerms['can_add_item']           ? 'bg-success' : 'bg-secondary' ?> px-3 py-2">
+        <i data-lucide="plus-circle" class="me-1"></i>Add Items
+    </span>
+    <span class="badge <?= $invPerms['can_edit_item']          ? 'bg-success' : 'bg-secondary' ?> px-3 py-2">
+        <i data-lucide="pencil" class="me-1"></i>Edit Items
+    </span>
+    <?php if (!hasRole(['Administrator', 'IT Manager'])): ?>
+        <span class="ms-auto small text-muted"><i data-lucide="info" class="me-1"></i>Contact your IT Manager to modify these permissions.</span>
+    <?php endif; ?>
+</div>
+
 <!-- Two-Column Control Row: Record Stock Transaction & Catalog Form -->
 <div class="row g-4 mb-4">
     <!-- 1. Stock Movement Transaction Form (Trigger Demonstration) -->
-    <div class="col-lg-6">
-        <div class="content-section h-100 border-primary">
+    <div class="<?= ($invPerms['can_record_transaction'] && ($invPerms['can_add_item'] || $invPerms['can_edit_item'])) ? 'col-lg-6' : 'col-12' ?>">
+        <div class="content-section h-100 <?= $invPerms['can_record_transaction'] ? 'border-primary' : '' ?>">
             <div class="section-header">
-                <h2 class="section-title text-primary">
-                    <i class="bi bi-arrow-left-right"></i>
-                    Record Stock Transaction (Triggers Active)
+                <h2 class="section-title <?= $invPerms['can_record_transaction'] ? 'text-primary' : 'text-muted' ?>">
+                    <i data-lucide="arrow-left-right"></i>
+                    Record Stock Transaction
                 </h2>
-                <span class="badge bg-primary text-white">Stock Automation</span>
+                <?php if ($invPerms['can_record_transaction']): ?>
+                    <span class="badge bg-primary text-white">Stock Automation</span>
+                <?php else: ?>
+                    <span class="badge bg-secondary"><i data-lucide="lock" class="me-1"></i>Access Restricted</span>
+                <?php endif; ?>
             </div>
 
             <p class="small text-muted mb-3">
-                Stock changes are handled exclusively through <code>inventory_transactions</code>. Database trigger <code>trg_check_inventory_stock_before_insert</code> validates stock availability, and <code>trg_update_inventory_stock_after_insert</code> updates quantities automatically.
+                Stock movements are recorded as auditable transactions. Available stock levels and inventory balances are automatically updated upon submission.
             </p>
 
+            <?php if ($invPerms['can_record_transaction']): ?>
             <form method="POST" action="/westec_bms/inventory/index.php" novalidate>
                 <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
                 <input type="hidden" name="action" value="record_transaction">
@@ -247,10 +364,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="row g-3">
                     <div class="col-12">
                         <label for="trans_item_id" class="form-label">Select Equipment / Component <span class="text-danger">*</span></label>
+                        <?php $selectedTransItem = (int)($_GET['trans_item_id'] ?? $_GET['edit'] ?? 0); ?>
                         <select class="form-select" id="trans_item_id" name="trans_item_id" required>
                             <option value="">-- Select Inventory Item --</option>
                             <?php foreach ($inventoryItems as $item): ?>
-                                <option value="<?= $item['item_id'] ?>">
+                                <option value="<?= $item['item_id'] ?>" <?= ($selectedTransItem === (int)$item['item_id']) ? 'selected' : '' ?>>
                                     <?= e($item['sku']) ?> &mdash; <?= e($item['item_name']) ?> (Current Stock: <?= $item['quantity_in_stock'] ?>)
                                 </option>
                             <?php endforeach; ?>
@@ -283,27 +401,40 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                    <span class="small text-muted"><i class="bi bi-shield-check me-1 text-success"></i>Trigger validates stock balance</span>
+                    <span class="small text-muted"><i data-lucide="shield-check" class="me-1 text-success"></i>Stock balance validated automatically</span>
                     <button type="submit" class="btn btn-westec px-4">
-                        <i class="bi bi-check2-circle me-1"></i> Post Transaction
+                        <i data-lucide="check-circle-2" class="me-1"></i> Post Transaction
                     </button>
                 </div>
             </form>
+            <?php else: ?>
+            <div class="text-center py-4">
+                <i data-lucide="lock" class="fs-1 text-secondary opacity-50 d-block mb-3"></i>
+                <p class="text-muted mb-1">You do not have permission to record stock transactions.</p>
+                <small class="text-muted">Contact your IT Manager to request access.</small>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 
     <!-- 2. Catalog Definition Form (Add / Edit Item Details) -->
-    <div class="col-lg-6">
+    <?php if ($invPerms['can_add_item'] || $invPerms['can_edit_item']): ?>
+    <div class="<?= ($invPerms['can_record_transaction']) ? 'col-lg-6' : 'col-12' ?>">
         <div class="content-section h-100">
             <div class="section-header">
                 <h2 class="section-title">
-                    <i class="bi bi-box-seam text-dark"></i>
+                    <i data-lucide="package" class="text-dark"></i>
                     <?= $editItem ? 'Edit Catalog Item: ' . e($editItem['sku']) : 'Add New Catalog Item' ?>
                 </h2>
                 <?php if ($editItem): ?>
-                    <a href="/westec_bms/inventory/index.php" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-x-circle me-1"></i> Cancel Edit
-                    </a>
+                    <div class="d-flex gap-2">
+                        <a href="/westec_bms/inventory/index.php" class="btn btn-sm btn-westec">
+                            <i data-lucide="plus-circle" class="me-1"></i> Add New Item
+                        </a>
+                        <a href="/westec_bms/inventory/index.php" class="btn btn-sm btn-outline-secondary">
+                            <i data-lucide="x-circle" class="me-1"></i> Cancel
+                        </a>
+                    </div>
                 <?php endif; ?>
             </div>
 
@@ -321,15 +452,38 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
 
                     <div class="col-md-6">
-                        <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
-                        <select class="form-select" id="category" name="category" required>
-                            <?php 
-                            $cats = ['Networking Hardware', 'Wireless Solutions', 'Cabling & Structured Cabling', 'Server Hardware', 'Network Security', 'Rack Accessories', 'Software Licenses', 'Peripherals'];
-                            $currCat = $editItem['category'] ?? 'Networking Hardware';
-                            foreach ($cats as $c): ?>
-                                <option value="<?= $c ?>" <?= ($currCat === $c) ? 'selected' : '' ?>><?= $c ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label for="category_select" class="form-label mb-0">Category <span class="text-danger">*</span></label>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-primary" id="toggleCategoryBtn" style="font-size: 0.82rem;">
+                                <span id="toggleCategoryLabel"><i data-lucide="plus-circle" class="me-1" style="width:13px;height:13px;"></i>Type new category</span>
+                            </button>
+                        </div>
+                        
+                        <?php 
+                        $currCat = $editItem['category'] ?? 'Networking Hardware';
+                        $isCustomCat = (!empty($currCat) && !in_array($currCat, $allCategories));
+                        ?>
+                        
+                        <div id="categorySelectBox">
+                            <select class="form-select" id="category_select" name="category_select" required>
+                                <option value="">-- Select Category --</option>
+                                <?php foreach ($allCategories as $c): ?>
+                                    <option value="<?= e($c) ?>" <?= (!$isCustomCat && $currCat === $c) ? 'selected' : '' ?>><?= e($c) ?></option>
+                                <?php endforeach; ?>
+                                <option value="__NEW__" <?= $isCustomCat ? 'selected' : '' ?>>+ Other (Type new category...)</option>
+                            </select>
+                        </div>
+
+                        <div id="categoryInputBox" class="<?= $isCustomCat ? '' : 'd-none' ?> mt-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted"><i data-lucide="tag" style="width:14px;height:14px;"></i></span>
+                                <input type="text" class="form-control" id="custom_category" name="custom_category" placeholder="Type new category name..." value="<?= $isCustomCat ? e($currCat) : '' ?>">
+                                <button type="button" class="btn btn-outline-secondary" id="cancelCustomCatBtn" title="Back to existing categories list">
+                                    <i data-lucide="list" class="me-1" style="width:14px;height:14px;"></i>List
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.78rem;">Type what you are adding if it is not in the list.</small>
+                        </div>
                     </div>
 
                     <div class="col-12">
@@ -346,29 +500,59 @@ require_once __DIR__ . '/../includes/header.php';
                         <label for="reorder_level" class="form-label">Reorder Level Alert Threshold</label>
                         <input type="number" class="form-control" id="reorder_level" name="reorder_level" value="<?= e($editItem['reorder_level'] ?? 5) ?>" min="0">
                     </div>
+
+                    <?php if ($editItem): ?>
+                        <div class="col-md-6">
+                            <label for="add_stock_qty" class="form-label">Add Stock / Inventory Units (+)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted">
+                                    Stock: <strong class="ms-1 <?= ($editItem['quantity_in_stock'] <= $editItem['reorder_level']) ? 'text-danger' : 'text-success' ?>"><?= (int)$editItem['quantity_in_stock'] ?></strong>
+                                </span>
+                                <input type="number" class="form-control" id="add_stock_qty" name="add_stock_qty" min="0" placeholder="Units to add (e.g. 10)">
+                            </div>
+                            <small class="text-muted">Enter quantity to increase stock for this item</small>
+                        </div>
+                    <?php else: ?>
+                        <div class="col-md-6">
+                            <label for="initial_stock" class="form-label">Initial Stock Quantity</label>
+                            <input type="number" class="form-control" id="initial_stock" name="initial_stock" value="0" min="0" placeholder="0">
+                            <small class="text-muted">Starting inventory units upon creation</small>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i>New items start at 0 stock</small>
-                    <button type="submit" class="btn btn-outline-dark px-4">
-                        <i class="bi bi-save me-1"></i> <?= $editItem ? 'Save Item Changes' : 'Register Catalog Item' ?>
+                    <small class="text-muted">
+                        <i data-lucide="info" class="me-1"></i>
+                        <?= $editItem ? 'Adding stock units will automatically log a transaction' : 'Initial stock will be received automatically' ?>
+                    </small>
+                    <button type="submit" class="btn btn-westec px-4" <?= ($editItem && !$invPerms['can_edit_item']) || (!$editItem && !$invPerms['can_add_item']) ? 'disabled' : '' ?>>
+                        <i data-lucide="save" class="me-1"></i> <?= $editItem ? 'Save Item Changes' : 'Register Catalog Item' ?>
                     </button>
                 </div>
             </form>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
 <!-- Stock Inventory Catalog Table -->
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-boxes text-primary"></i>
+            <i data-lucide="boxes" class="text-primary"></i>
             WesTec Inventory Catalog & Live Stock Balances
         </h2>
-        <div class="input-group input-group-sm" style="max-width: 250px;">
-            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" placeholder="Search catalog..." data-table-filter="inventoryTable">
+        <div class="d-flex gap-2 align-items-center">
+            <?php if ($invPerms['can_add_item']): ?>
+                <a href="/westec_bms/inventory/index.php" class="btn btn-sm btn-westec">
+                    <i data-lucide="plus-circle" class="me-1"></i> Add Inventory Item
+                </a>
+            <?php endif; ?>
+            <div class="input-group input-group-sm" style="max-width: 250px;">
+                <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
+                <input type="text" class="form-control" placeholder="Search catalog..." data-table-filter="inventoryTable">
+            </div>
         </div>
     </div>
 
@@ -413,15 +597,28 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php if ($item['quantity_in_stock'] <= 0): ?>
                                     <span class="badge bg-danger">OUT OF STOCK</span>
                                 <?php elseif ($isLowStock): ?>
-                                    <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>REORDER</span>
+                                    <span class="badge bg-warning text-dark"><i data-lucide="alert-triangle" class="me-1"></i>REORDER</span>
                                 <?php else: ?>
                                     <span class="badge bg-success">IN STOCK</span>
                                 <?php endif; ?>
                             </td>
                             <td class="text-end">
-                                <a href="/westec_bms/inventory/index.php?edit=<?= $item['item_id'] ?>" class="btn btn-sm btn-outline-secondary" title="Edit Catalog Details">
-                                    <i class="bi bi-pencil-square"></i>
-                                </a>
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <?php if ($invPerms['can_record_transaction']): ?>
+                                        <a href="/westec_bms/inventory/index.php?trans_item_id=<?= $item['item_id'] ?>#trans_item_id" class="btn btn-sm btn-outline-success py-0 px-2" title="Record Stock Movement / Transaction">
+                                            <i data-lucide="plus" class="me-1"></i>Stock
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($invPerms['can_edit_item']): ?>
+                                        <a href="/westec_bms/inventory/index.php?edit=<?= $item['item_id'] ?>" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Edit Catalog Details">
+                                            <i data-lucide="file-edit"></i>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="btn btn-sm btn-outline-secondary disabled py-0 px-2" title="Edit access not granted">
+                                            <i data-lucide="lock"></i>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -435,10 +632,10 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-clock-history text-secondary"></i>
-            Recent Stock Movement Audit Ledger (inventory_transactions)
+            <i data-lucide="history" class="text-secondary"></i>
+            Recent Stock Movement Ledger
         </h2>
-        <span class="badge bg-light text-muted border">Automatic Trigger Execution Log</span>
+        <span class="badge bg-light text-muted border">Transaction History</span>
     </div>
 
     <div class="table-responsive">
@@ -470,9 +667,9 @@ require_once __DIR__ . '/../includes/header.php';
                             </td>
                             <td class="text-center">
                                 <?php if ($tx['transaction_type'] === 'IN'): ?>
-                                    <span class="badge bg-success"><i class="bi bi-arrow-down-left me-1"></i>IN</span>
+                                    <span class="badge bg-success"><i data-lucide="arrow-down-left" class="me-1"></i>IN</span>
                                 <?php elseif ($tx['transaction_type'] === 'OUT'): ?>
-                                    <span class="badge bg-danger"><i class="bi bi-arrow-up-right me-1"></i>OUT</span>
+                                    <span class="badge bg-danger"><i data-lucide="arrow-up-right" class="me-1"></i>OUT</span>
                                 <?php else: ?>
                                     <span class="badge bg-info text-dark">ADJUST</span>
                                 <?php endif; ?>
@@ -488,5 +685,80 @@ require_once __DIR__ . '/../includes/header.php';
         </table>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const catSelect = document.getElementById('category_select');
+    const catInputBox = document.getElementById('categoryInputBox');
+    const customCatInput = document.getElementById('custom_category');
+    const toggleBtn = document.getElementById('toggleCategoryBtn');
+    const toggleLabel = document.getElementById('toggleCategoryLabel');
+    const cancelBtn = document.getElementById('cancelCustomCatBtn');
+
+    if (!catSelect || !catInputBox) return;
+
+    function showCustomInput(focus = true) {
+        catInputBox.classList.remove('d-none');
+        if (catSelect.value !== '__NEW__') {
+            catSelect.value = '__NEW__';
+        }
+        if (customCatInput) {
+            customCatInput.required = true;
+            if (focus) customCatInput.focus();
+        }
+        if (toggleLabel) {
+            toggleLabel.innerHTML = '<i data-lucide="list" class="me-1" style="width:13px;height:13px;"></i>Choose from list';
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    function showSelectList() {
+        catInputBox.classList.add('d-none');
+        if (customCatInput) {
+            customCatInput.required = false;
+            customCatInput.value = '';
+        }
+        if (catSelect.value === '__NEW__') {
+            catSelect.value = catSelect.options[1] ? catSelect.options[1].value : '';
+        }
+        if (toggleLabel) {
+            toggleLabel.innerHTML = '<i data-lucide="plus-circle" class="me-1" style="width:13px;height:13px;"></i>Type new category';
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    catSelect.addEventListener('change', function () {
+        if (this.value === '__NEW__') {
+            showCustomInput(true);
+        } else {
+            catInputBox.classList.add('d-none');
+            if (customCatInput) {
+                customCatInput.required = false;
+                customCatInput.value = '';
+            }
+            if (toggleLabel) {
+                toggleLabel.innerHTML = '<i data-lucide="plus-circle" class="me-1" style="width:13px;height:13px;"></i>Type new category';
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    });
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            if (catInputBox.classList.contains('d-none')) {
+                showCustomInput(true);
+            } else {
+                showSelectList();
+            }
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            showSelectList();
+        });
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

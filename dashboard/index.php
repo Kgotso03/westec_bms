@@ -14,13 +14,34 @@ requireLogin();
 $pdo = getDbConnection();
 $currentUser = getCurrentUser();
 
-// 1. Fetch system statistics
-$totalClients = (int)$pdo->query("SELECT COUNT(*) FROM clients")->fetchColumn();
-$openTickets = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status IN ('Open', 'In Progress', 'Pending')")->fetchColumn();
-$criticalTickets = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE priority = 'Critical' AND status NOT IN ('Resolved', 'Closed')")->fetchColumn();
-$lowStockCount = (int)$pdo->query("SELECT COUNT(*) FROM inventory WHERE quantity_in_stock <= reorder_level")->fetchColumn();
-$activeProjects = (int)$pdo->query("SELECT COUNT(*) FROM projects WHERE status IN ('Planning', 'In Progress')")->fetchColumn();
-$totalStaff = (int)$pdo->query("SELECT COUNT(*) FROM staff WHERE is_active = 1")->fetchColumn();
+// 1. Fetch system statistics safely
+$totalClients = 0;
+$openTickets = 0;
+$criticalTickets = 0;
+$lowStockCount = 0;
+$activeProjects = 0;
+$totalStaff = 0;
+
+try {
+    $statsStmt = $pdo->query("
+        SELECT 
+            (SELECT COUNT(*) FROM clients) AS total_clients,
+            (SELECT COUNT(*) FROM tickets WHERE status IN ('Open', 'In Progress', 'Pending')) AS open_tickets,
+            (SELECT COUNT(*) FROM tickets WHERE priority = 'Critical' AND status NOT IN ('Resolved', 'Closed')) AS critical_tickets,
+            (SELECT COUNT(*) FROM inventory WHERE quantity_in_stock <= reorder_level) AS low_stock,
+            (SELECT COUNT(*) FROM projects WHERE status IN ('Planning', 'In Progress')) AS active_projects,
+            (SELECT COUNT(*) FROM staff WHERE is_active = 1) AS total_staff
+    ");
+    $stats = $statsStmt->fetch() ?: [];
+    $totalClients = (int)($stats['total_clients'] ?? 0);
+    $openTickets = (int)($stats['open_tickets'] ?? 0);
+    $criticalTickets = (int)($stats['critical_tickets'] ?? 0);
+    $lowStockCount = (int)($stats['low_stock'] ?? 0);
+    $activeProjects = (int)($stats['active_projects'] ?? 0);
+    $totalStaff = (int)($stats['total_staff'] ?? 0);
+} catch (\Throwable $e) {
+    error_log('Dashboard stats error: ' . $e->getMessage());
+}
 
 // 2. Fetch Recent Service Tickets
 $recentTicketsStmt = $pdo->query("
@@ -121,9 +142,13 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="content-section p-3 text-center mb-0 h-100">
             <span class="text-muted small text-uppercase fw-semibold d-block">Active Engineers</span>
             <span class="display-6 fw-bold text-dark d-block my-1"><?= $totalStaff ?></span>
+            <?php if (hasRole(['Administrator', 'IT Manager'])): ?>
             <a href="/westec_bms/staff/index.php" class="small text-decoration-none fw-semibold text-secondary">
                 Staff Directory &rarr;
             </a>
+            <?php else: ?>
+            <span class="small text-muted">Technical Team</span>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -135,11 +160,11 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="content-section h-100">
             <div class="section-header">
                 <h2 class="section-title">
-                    <i class="bi bi-ticket-detailed-fill text-primary"></i>
+                    <i data-lucide="ticket" class="text-primary"></i>
                     Recent Service Tickets
                 </h2>
                 <a href="/westec_bms/tickets/index.php" class="btn btn-sm btn-westec-outline">
-                    <i class="bi bi-plus-circle me-1"></i> New Ticket
+                    <i data-lucide="plus-circle" class="me-1"></i> New Ticket
                 </a>
             </div>
 
@@ -184,52 +209,31 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Fast Actions & Database Trigger Status -->
+    <!-- Fast Actions & Operational Overview -->
     <div class="col-lg-5">
         <div class="content-section mb-4">
             <div class="section-header">
                 <h2 class="section-title">
-                    <i class="bi bi-lightning-charge-fill text-warning"></i>
-                    Database Triggers & Business Rules
+                    <i data-lucide="zap" class="text-primary"></i>
+                    Quick Operations
                 </h2>
-                <span class="badge bg-success">6 ACTIVE</span>
             </div>
-            <p class="small text-muted mb-3">
-                MySQL database triggers enforce system integrity autonomously across transactions, registration, and dates.
-            </p>
-            <ul class="list-group list-group-flush small mb-3">
-                <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>trg_after_user_register</strong>
-                        <div class="text-muted" style="font-size: 0.75rem;">Logs registration events directly to audit trail</div>
-                    </div>
-                    <span class="badge bg-light text-success border">Verified</span>
-                </li>
-                <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>trg_check_inventory_stock_before_insert</strong>
-                        <div class="text-muted" style="font-size: 0.75rem;">Rejects stock issues exceeding current inventory</div>
-                    </div>
-                    <span class="badge bg-light text-success border">Enforced</span>
-                </li>
-                <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>trg_update_inventory_stock_after_insert</strong>
-                        <div class="text-muted" style="font-size: 0.75rem;">Updates inventory stock levels on transactions</div>
-                    </div>
-                    <span class="badge bg-light text-success border">Automated</span>
-                </li>
-                <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>trg_validate_project_dates_before_insert</strong>
-                        <div class="text-muted" style="font-size: 0.75rem;">Rejects projects where due_date &lt; start_date</div>
-                    </div>
-                    <span class="badge bg-light text-success border">Enforced</span>
-                </li>
-            </ul>
-            <div class="d-grid">
-                <a href="/westec_bms/admin/trigger_demo.php" class="btn btn-westec btn-sm">
-                    <i class="bi bi-play-circle-fill me-1"></i> Open Interactive Trigger Test Lab
+            <div class="d-grid gap-2">
+                <a href="/westec_bms/tickets/index.php" class="btn btn-outline-primary d-flex align-items-center justify-content-between p-2 text-start">
+                    <span><i data-lucide="ticket" class="me-2"></i> Log Service Ticket</span>
+                    <i data-lucide="arrow-up-right"></i>
+                </a>
+                <a href="/westec_bms/inventory/index.php" class="btn btn-outline-secondary d-flex align-items-center justify-content-between p-2 text-start">
+                    <span><i data-lucide="package" class="me-2"></i> Record Stock Movement</span>
+                    <i data-lucide="arrow-up-right"></i>
+                </a>
+                <a href="/westec_bms/projects/index.php" class="btn btn-outline-secondary d-flex align-items-center justify-content-between p-2 text-start">
+                    <span><i data-lucide="workflow" class="me-2"></i> Create Infrastructure Project</span>
+                    <i data-lucide="arrow-up-right"></i>
+                </a>
+                <a href="/westec_bms/clients/index.php" class="btn btn-outline-secondary d-flex align-items-center justify-content-between p-2 text-start">
+                    <span><i data-lucide="building-2" class="me-2"></i> Register New Client</span>
+                    <i data-lucide="arrow-up-right"></i>
                 </a>
             </div>
         </div>
@@ -239,7 +243,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="content-section border-warning">
                 <div class="section-header">
                     <h2 class="section-title text-warning">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <i data-lucide="alert-triangle"></i>
                         Reorder Alerts (<?= count($reorderItems) ?> Items)
                     </h2>
                     <a href="/westec_bms/inventory/index.php" class="btn btn-sm btn-outline-warning">
@@ -280,40 +284,47 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-diagram-3-fill" style="color: var(--westec-primary);"></i>
+            <i data-lucide="workflow" style="color: var(--westec-primary);"></i>
             Current Network & Infrastructure Projects
         </h2>
         <a href="/westec_bms/projects/index.php" class="btn btn-sm btn-westec">
-            <i class="bi bi-plus-circle me-1"></i> Add Project
+            <i data-lucide="plus-circle" class="me-1"></i> Add Project
         </a>
     </div>
 
     <div class="row g-3">
-        <?php foreach ($activeProjectsList as $proj): 
-            $totalM = (int)$proj['total_milestones'];
-            $achievedM = (int)$proj['achieved_milestones'];
-            $percent = $totalM > 0 ? round(($achievedM / $totalM) * 100) : 0;
-        ?>
-            <div class="col-md-6 col-xl-4">
-                <div class="border rounded p-3 bg-light h-100">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <span class="badge bg-white text-dark border"><?= e($proj['client_name']) ?></span>
-                        <?= getStatusBadge($proj['status']) ?>
-                    </div>
-                    <h3 class="h6 fw-bold text-dark mb-1"><?= e($proj['project_name']) ?></h3>
-                    <div class="text-muted small mb-2">
-                        Budget: <strong><?= formatCurrency($proj['budget']) ?></strong> &bull; Due: <?= formatDate($proj['due_date'], 'd M Y') ?>
-                    </div>
-                    <div class="d-flex justify-content-between small text-muted mb-1">
-                        <span>Milestones: <?= $achievedM ?> of <?= $totalM ?> completed</span>
-                        <span class="fw-bold"><?= $percent ?>%</span>
-                    </div>
-                    <div class="progress" style="height: 6px;">
-                        <div class="progress-bar" role="progressbar" style="width: <?= $percent ?>%; background-color: var(--westec-primary);" aria-valuenow="<?= $percent ?>" aria-valuemin="0" aria-valuemax="100"></div>
+        <?php if (empty($activeProjectsList)): ?>
+            <div class="col-12 text-center text-muted py-4">
+                <i data-lucide="workflow" class="d-block display-6 text-muted mb-2"></i>
+                No active projects recorded yet.
+            </div>
+        <?php else: ?>
+            <?php foreach ($activeProjectsList as $proj): 
+                $totalM = (int)$proj['total_milestones'];
+                $achievedM = (int)$proj['achieved_milestones'];
+                $percent = $totalM > 0 ? round(($achievedM / $totalM) * 100) : 0;
+            ?>
+                <div class="col-md-6 col-xl-4">
+                    <div class="border rounded p-3 bg-light h-100">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-white text-dark border"><?= e($proj['client_name']) ?></span>
+                            <?= getStatusBadge($proj['status']) ?>
+                        </div>
+                        <h3 class="h6 fw-bold text-dark mb-1"><?= e($proj['project_name']) ?></h3>
+                        <div class="text-muted small mb-2">
+                            Budget: <strong><?= formatCurrency($proj['budget']) ?></strong> &bull; Due: <?= formatDate($proj['due_date'], 'd M Y') ?>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Milestones: <?= $achievedM ?> of <?= $totalM ?> completed</span>
+                            <span class="fw-bold"><?= $percent ?>%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar" role="progressbar" style="width: <?= $percent ?>%; background-color: var(--westec-primary);" aria-valuenow="<?= $percent ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 </div>
 

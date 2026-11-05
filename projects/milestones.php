@@ -182,13 +182,13 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Quick Navigation Bar for Projects Suite -->
 <div class="d-flex gap-2 mb-3">
     <a href="/westec_bms/projects/index.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-diagram-3-fill me-1"></i> Projects Overview
+        <i data-lucide="workflow" class="me-1"></i> Projects Overview
     </a>
     <a href="/westec_bms/projects/milestones.php" class="btn btn-westec btn-sm">
-        <i class="bi bi-flag-fill me-1"></i> Milestones Management
+        <i data-lucide="flag" class="me-1"></i> Milestones Management
     </a>
     <a href="/westec_bms/projects/assignments.php" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-person-lines-fill me-1"></i> Team Staff Assignments
+        <i data-lucide="users" class="me-1"></i> Team Staff Assignments
     </a>
 </div>
 
@@ -206,12 +206,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-flag-fill text-primary"></i>
+            <i data-lucide="flag" class="text-primary"></i>
             <?= $editMilestone ? 'Edit Milestone: ' . e($editMilestone['milestone_name']) : 'Add Project Milestone' ?>
         </h2>
         <?php if ($editMilestone): ?>
             <a href="/westec_bms/projects/milestones.php?project_id=<?= $selectedProjectId ?>" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle me-1"></i> Cancel Edit
+                <i data-lucide="x-circle" class="me-1"></i> Cancel Edit
             </a>
         <?php endif; ?>
     </div>
@@ -264,7 +264,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="text-end mt-3 pt-3 border-top">
             <button type="submit" class="btn btn-westec px-4">
-                <i class="bi bi-save me-1"></i> <?= $editMilestone ? 'Update Milestone' : 'Save Milestone' ?>
+                <i data-lucide="save" class="me-1"></i> <?= $editMilestone ? 'Update Milestone' : 'Save Milestone' ?>
             </button>
         </div>
     </form>
@@ -274,7 +274,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="content-section">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="bi bi-list-task text-primary"></i>
+            <i data-lucide="list-todo" class="text-primary"></i>
             Milestones Register (<?= count($milestones) ?>)
         </h2>
         <div class="d-flex gap-2">
@@ -290,7 +290,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </select>
             </form>
             <div class="input-group input-group-sm" style="max-width: 200px;">
-                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                <span class="input-group-text bg-light"><i data-lucide="search"></i></span>
                 <input type="text" class="form-control" placeholder="Search..." data-table-filter="milestonesTable">
             </div>
         </div>
@@ -329,7 +329,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <a href="/westec_bms/projects/milestones.php?edit=<?= $m['milestone_id'] ?>" class="btn btn-outline-secondary" title="Edit Milestone">
-                                        <i class="bi bi-pencil-square"></i>
+                                        <i data-lucide="file-edit"></i>
                                     </a>
                                     <form method="POST" action="/westec_bms/projects/milestones.php" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
@@ -337,7 +337,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         <input type="hidden" name="milestone_id" value="<?= $m['milestone_id'] ?>">
                                         <input type="hidden" name="project_id" value="<?= $m['project_id'] ?>">
                                         <button type="submit" class="btn btn-outline-danger" title="Delete Milestone" data-confirm-delete="Delete this milestone?">
-                                            <i class="bi bi-trash"></i>
+                                            <i data-lucide="trash-2"></i>
                                         </button>
                                     </form>
                                 </div>

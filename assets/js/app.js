@@ -135,5 +135,110 @@ document.addEventListener('DOMContentLoaded', function () {
             closeMenu();
         }
     });
+
+    // 6. Lucide Icons Auto-Converter and Initializer
+    function renderLucideIcons() {
+        const biLucideMap = {
+            'bi-shield-check': 'shield-check',
+            'bi-shield-lock-fill': 'shield',
+            'bi-shield-lock': 'shield',
+            'bi-shield-x': 'shield-x',
+            'bi-speedometer2': 'layout-dashboard',
+            'bi-people-fill': 'users',
+            'bi-people': 'users',
+            'bi-person-lines-fill': 'users',
+            'bi-person-circle': 'circle-user',
+            'bi-person-plus-fill': 'user-plus',
+            'bi-person-plus': 'user-plus',
+            'bi-person-check-fill': 'user-check',
+            'bi-person-check': 'user-check',
+            'bi-person-badge-fill': 'badge-check',
+            'bi-person-vcard-fill': 'contact',
+            'bi-person-workspace': 'laptop',
+            'bi-person-x': 'user-x',
+            'bi-person': 'user',
+            'bi-building': 'building-2',
+            'bi-building-add': 'building-2',
+            'bi-ticket-detailed-fill': 'ticket',
+            'bi-box-seam-fill': 'package',
+            'bi-box-seam': 'package',
+            'bi-boxes': 'boxes',
+            'bi-diagram-3-fill': 'workflow',
+            'bi-diagram-3': 'workflow',
+            'bi-graph-up-arrow': 'trending-up',
+            'bi-journal-text': 'book-open',
+            'bi-key': 'key',
+            'bi-key-fill': 'key',
+            'bi-box-arrow-right': 'log-out',
+            'bi-box-arrow-in-right': 'log-in',
+            'bi-exclamation-triangle-fill': 'alert-triangle',
+            'bi-exclamation-triangle': 'alert-triangle',
+            'bi-exclamation-circle': 'alert-circle',
+            'bi-info-circle': 'info',
+            'bi-pencil-square': 'file-edit',
+            'bi-pencil-fill': 'pencil',
+            'bi-pencil': 'pencil',
+            'bi-trash3-fill': 'trash-2',
+            'bi-trash': 'trash-2',
+            'bi-eye': 'eye',
+            'bi-check-circle-fill': 'check-circle-2',
+            'bi-check2-circle': 'check-circle-2',
+            'bi-check-all': 'check-check',
+            'bi-check-lg': 'check',
+            'bi-x-circle': 'x-circle',
+            'bi-slash-circle': 'ban',
+            'bi-lock-fill': 'lock',
+            'bi-lock': 'lock',
+            'bi-unlock': 'unlock',
+            'bi-send-fill': 'send',
+            'bi-arrow-left': 'arrow-left',
+            'bi-arrow-repeat': 'repeat',
+            'bi-arrow-counterclockwise': 'rotate-ccw',
+            'bi-arrow-up-right': 'arrow-up-right',
+            'bi-arrow-down-left': 'arrow-down-left',
+            'bi-arrow-left-right': 'arrow-left-right',
+            'bi-clock-history': 'history',
+            'bi-database-check': 'database',
+            'bi-kanban': 'kanban',
+            'bi-list-check': 'list-checks',
+            'bi-list-task': 'list-todo',
+            'bi-list-ul': 'list',
+            'bi-plus-circle': 'plus-circle',
+            'bi-save': 'save',
+            'bi-floppy': 'save',
+            'bi-search': 'search',
+            'bi-filter': 'filter',
+            'bi-funnel': 'filter',
+            'bi-flag-fill': 'flag',
+            'bi-flag': 'flag',
+            'bi-lightning-charge-fill': 'zap',
+            'bi-file-earmark-arrow-down-fill': 'file-down',
+            'bi-folder-plus': 'folder-plus',
+            'bi-envelope': 'mail',
+            'bi-telephone': 'phone',
+            'bi-briefcase': 'briefcase',
+            'bi-cash-stack': 'banknote',
+            'bi-archive': 'archive'
+        };
+
+        // Convert any fallback bootstrap icon classes to data-lucide attributes
+        document.querySelectorAll('i[class*="bi-"]').forEach(el => {
+            const classes = Array.from(el.classList);
+            for (const cls of classes) {
+                if (biLucideMap[cls]) {
+                    el.setAttribute('data-lucide', biLucideMap[cls]);
+                    el.classList.remove(cls, 'bi');
+                    break;
+                }
+            }
+        });
+
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    renderLucideIcons();
+    window.renderLucideIcons = renderLucideIcons;
 });
 
