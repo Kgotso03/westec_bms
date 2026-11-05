@@ -68,3 +68,4 @@ return [
         'audit_trail'  => true,            // Records dispatches in the database audit_logs table
     ],
 ];
+
